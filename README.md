@@ -7,7 +7,7 @@
 
 # Beken BK7258 — WebRTC Camera Livestream with Anedya
 
-![Camera View](./media/bk7258_camera_view.png)
+![Camera View](./media/beken_camera_view.png)
 
 Turn a Beken BK7258 with a UVC camera into a real-time, two-way audio and video
 device with Anedya (Commands signalling and TURN relay).
