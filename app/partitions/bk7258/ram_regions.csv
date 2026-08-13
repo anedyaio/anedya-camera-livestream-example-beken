@@ -1,0 +1,35 @@
+# please read doc: https://docs.bekencorp.com/arminodoc/bk_avdk_smp/smp_doc/bk7258/zh_CN/v3.0.1/developer-guide/config_tools/bk_config_ram_regions.html
+# SRAM base addr is 0x28000000, capacity is 640K
+# PSRAM base addr is 0x60000000
+PSRAM_CAPCAITY_SIZE=4M
+#Name,                   Type,     Offset,     Size
+AP_SPINLOCK,             SRAM, 0x28000000, 0x010000
+HARDWARE_ACC,            SRAM,           , 0x01b000
+AP_RAM,                  SRAM,           , 0x043c00
+CP_RAM,                  SRAM,           , 0x030b00
+PWR_MNG,                 SRAM,           , 0x000100
+SWAP,                    SRAM,           , 0x000800
+# ENCODE grown by 0x70000 (458752 B), taken from DISPLAY. Stock is
+# ENCODE=0x0E7000 / DISPLAY=0x260000; revert both together if the YUV
+# transcode starts failing to allocate.
+#
+# Why: ENCODE backs BOTH capture pools (frame_buffer_fb_malloc ->
+# frame_buffer_encode_malloc for IMAGE_MJPEG *and* IMAGE_H264; only IMAGE_YUV
+# goes to DISPLAY). At stock 0x0E7000 = 946176 B the two pools of 4 buffers
+# each cap out at 100 KB per frame, and 720p MJPEG of a high-entropy scene
+# (a laptop screen) runs to 130 KB+, overflowing the UVC assembly buffer and
+# truncating the frame before the decoder ever sees it.
+#
+# DISPLAY only ever holds one 720p YUV422 transcode frame (1280*720*2 =
+# 1843200 B); it cannot hold two, so the remainder was slack. After this it is
+# 0x1F0000 = 2031616 B, leaving 188416 B over that single frame.
+#
+# Keep total = 4 MB: 0x0 + 0xC800 + 0x157000 + 0x1F0000 + 0xD000 + 0x9F000
+#                    + 0x800 = 0x400000.
+PSRAM_MEM_SLAB_USER,    PSRAM, 0x60000000, 0x0
+PSRAM_MEM_SLAB_AUDIO,   PSRAM,           , 0x00C800
+PSRAM_MEM_SLAB_ENCODE,  PSRAM,           , 0x157000
+PSRAM_MEM_SLAB_DISPLAY, PSRAM,           , 0x1F0000
+CP_PSRAM_HEAP,          PSRAM,           , 0x00D000
+AP_PSRAM_HEAP,          PSRAM,           , 0x09f000
+AP_PSRAM_SECTION,       PSRAM,           , 0x000800

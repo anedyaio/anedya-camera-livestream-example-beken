@@ -1,0 +1,18 @@
+# Shell scripts and Makefiles run inside a Linux container. A Windows checkout
+# with CRLF endings makes them fail with "bad interpreter" or silent breakage,
+# so force LF regardless of the developer's core.autocrlf setting.
+*.sh            text eol=lf
+*.mk            text eol=lf
+Makefile        text eol=lf
+*.cmake         text eol=lf
+CMakeLists.txt  text eol=lf
+
+# PowerShell is only ever run on Windows.
+*.ps1           text eol=crlf
+
+# Binaries must never be line-ending converted.
+*.bin           binary
+*.a             binary
+*.elf           binary
+*.png           binary
+*.jpg           binary

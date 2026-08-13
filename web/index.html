@@ -1,0 +1,1621 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP Peer Handshake Test</title>
+  <style>
+    /* ---------- tokens ---------- */
+    :root {
+      --bg: #080b10;
+      --bg-grad: radial-gradient(1200px 600px at 50% -10%, #12202e 0%, #080b10 60%);
+      --surface: #10161f;
+      --surface-2: #161e29;
+      --border: #22303f;
+      --border-soft: #1a242f;
+      --text: #e8eff7;
+      --muted: #8798ad;
+      --brand: #1FA2FF;
+      --brand-dim: #0d7fd1;
+      /* Second accent hue — used sparingly (LIVE badge, decorative glow,
+         header rule, title accent) so the page reads as designed rather than
+         a single-blue monochrome status console. */
+      --accent2: #8b6bff;
+      --accent2-dim: #6a47e8;
+      --ok: #2fd07a;
+      --err: #ff5f56;
+      --warn: #f5a623;
+      --radius: 14px;
+      --radius-sm: 9px;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .55);
+      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      /* Two overlapping color blobs instead of one flat radial — gives the
+         backdrop some depth/atmosphere without a texture image. */
+      background:
+        radial-gradient(900px 480px at 8% -8%, rgba(31, 162, 255, .16) 0%, transparent 60%),
+        radial-gradient(900px 520px at 100% 0%, rgba(139, 107, 255, .13) 0%, transparent 55%),
+        var(--bg);
+      background-attachment: fixed;
+      color: var(--text);
+      font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Thin gradient rule pinned to the very top of the viewport — a small
+       signature touch that reads as "designed" rather than default. */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--brand), var(--accent2));
+      z-index: 10;
+    }
+
+    .app {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 24px 20px 56px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* ---------- top bar ---------- */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 18px;
+      position: relative;
+    }
+
+    /* Gradient underline instead of a flat border — echoes the top rule and
+       gives the header a bit of color without being loud about it. */
+    .topbar::after {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border), var(--border-soft) 60%, transparent);
+    }
+
+    .brand-group { display: flex; align-items: center; gap: 14px; }
+
+    /* The logo used to sit outside .app entirely — a raw, unstyled <a> at the
+       very top of <body>, disconnected from the header layout, which is why
+       it read as randomly placed in the corner. It now lives inside .topbar
+       as a proper flex item, sized to sit comfortably beside the title. */
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      position: relative;
+      padding: 8px;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Soft radial glow behind the mark — a small plate of color rather than
+       the logo floating bare on the background. */
+    .brand::before {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      border-radius: 12px;
+      background: radial-gradient(circle at 30% 30%, rgba(31, 162, 255, .22), transparent 70%);
+      opacity: 0;
+      transition: opacity .2s ease;
+    }
+
+    .brand:hover::before { opacity: 1; }
+    .brand svg { width: 108px; height: auto; display: block; position: relative; }
+
+    .brand-divider {
+      width: 1px;
+      height: 30px;
+      background: linear-gradient(180deg, transparent, var(--border), transparent);
+    }
+
+    .titles h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: .1px;
+      /* Subtle two-tone title — the one place the accent gradient is used
+         typographically, tying the header to the top rule. */
+      background: linear-gradient(90deg, var(--text) 55%, #c9b8ff 130%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .titles p {
+      margin: 3px 0 0;
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+
+    /* ---------- pills / chips ---------- */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 12.5px;
+      font-weight: 550;
+      white-space: nowrap;
+    }
+
+    .pill::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 0 3px rgba(135, 152, 173, .16);
+    }
+
+    #deviceStatus.online::before { background: var(--ok); box-shadow: 0 0 0 3px rgba(47, 208, 122, .18); }
+    #deviceStatus.offline::before { background: var(--err); box-shadow: 0 0 0 3px rgba(255, 95, 86, .18); }
+    #deviceStatus.online { color: #b6f2d3; border-color: rgba(47, 208, 122, .34); }
+    #deviceStatus.offline { color: #ffc4c0; border-color: rgba(255, 95, 86, .34); }
+    /* Initial state before the first status poll resolves. */
+    #deviceStatus.unknown { color: var(--muted); }
+
+    .statusbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #status, #networkMode {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 12.5px;
+      font-weight: 550;
+    }
+
+    #status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 0 3px rgba(135, 152, 173, .16);
+    }
+
+    #status.ok { color: #b6f2d3; border-color: rgba(47, 208, 122, .34); }
+    #status.ok::before { background: var(--ok); box-shadow: 0 0 0 3px rgba(47, 208, 122, .18); }
+    #status.err { color: #ffc4c0; border-color: rgba(255, 95, 86, .34); }
+    #status.err::before { background: var(--err); box-shadow: 0 0 0 3px rgba(255, 95, 86, .18); }
+
+    #networkMode { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+    #networkMode.turn { color: #ffd9a1; border-color: rgba(245, 166, 35, .36); }
+    #networkMode.p2p { color: #a9defd; border-color: rgba(31, 162, 255, .38); }
+
+    /* ---------- video stage ---------- */
+    .stage-shell { position: relative; }
+
+    .video-panel {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .video-panel[hidden] { display: none; }
+
+    /* LIVE badge, shown purely off existing state — no new script hook needed.
+       #status already gets class="ok" from setStatus() once the stream is
+       flowing; :has() lets the video panel react to that sibling directly. */
+    .app:has(#status.ok) .video-panel::before {
+      content: "LIVE";
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 2;
+      /* display:inline-flex + gap did nothing here — "LIVE" is text content,
+         not child elements, so there was nothing for gap to space out. The
+         dot (::after, a separate element) was positioned at the same x-
+         coordinate the text starts at, landing squarely on top of the "L".
+         Fixed by reserving real room on the left instead. */
+      padding: 5px 12px 5px 22px;
+      border-radius: 999px;
+      background: rgba(8, 12, 18, .7);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 95, 86, .4);
+      color: #ffb3ae;
+      font: 700 10.5px/1 system-ui, sans-serif;
+      letter-spacing: .07em;
+    }
+
+    .app:has(#status.ok) .video-panel::after {
+      content: "";
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 3;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--err);
+      animation: livepulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes livepulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 95, 86, .55); }
+      50% { box-shadow: 0 0 0 5px rgba(255, 95, 86, 0); }
+    }
+
+    #preview {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      display: block;
+      /* Orientation correction is applied inline by the orientation script at
+         the bottom of the page. Native <video controls> was removed because a
+         CSS transform on the element flips the browser's own control bar along
+         with the picture; the overlay controls below replace it. */
+      transition: transform .18s ease;
+    }
+
+    /* Idle placeholder, shown whenever the video panel is hidden. Pure CSS —
+       the sibling selector keys off the [hidden] attribute the script toggles,
+       so no extra JS has to stay in sync. */
+    .stage-empty {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background:
+        repeating-linear-gradient(45deg, rgba(255, 255, 255, .012) 0 12px, transparent 12px 24px),
+        var(--surface);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+    }
+
+    .video-panel:not([hidden]) ~ .stage-empty { display: none; }
+
+    .stage-empty svg { width: 40px; height: 40px; opacity: .5; }
+    .stage-empty strong { color: var(--text); font-size: 14.5px; font-weight: 600; }
+    .stage-empty span { font-size: 13px; max-width: 42ch; }
+
+    /* overlay controls */
+    .stage-controls {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity .18s ease, transform .18s ease;
+    }
+
+    .video-panel:hover .stage-controls,
+    .video-panel:focus-within .stage-controls { opacity: 1; transform: none; }
+
+    .ctl {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, .16);
+      background: rgba(8, 12, 18, .74);
+      backdrop-filter: blur(8px);
+      color: #e8eff7;
+      font: 500 12px/1 system-ui, sans-serif;
+      padding: 8px 11px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ctl:hover:not(:disabled) { background: rgba(20, 30, 42, .9); border-color: rgba(255, 255, 255, .28); }
+    .ctl.on { background: var(--brand); border-color: var(--brand); color: #001a2e; font-weight: 650; }
+
+    /* Muted is a warning state, not an "active" one — deliberately red rather
+       than reusing .on's brand blue, so a muted stream is obvious at a glance
+       and never reads as "enabled". */
+    .ctl.muted { background: var(--err); border-color: var(--err); color: #2a0906; font-weight: 650; }
+    .ctl.muted:hover:not(:disabled) { background: #ff7a72; border-color: #ff7a72; }
+
+    .ctl:disabled { opacity: .38; cursor: not-allowed; }
+
+    .watermark {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(8, 12, 18, .55);
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+      opacity: .85;
+    }
+
+    .watermark span { font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+    .watermark svg { width: 62px; height: auto; display: block; }
+
+    /* ---------- dock ---------- */
+    .dock {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    button {
+      appearance: none;
+      font: 600 13.5px/1 system-ui, sans-serif;
+      padding: 11px 18px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, transform .06s ease;
+    }
+
+    button:hover:not(:disabled) { background: #1d2836; border-color: #2c3d50; }
+    button:active:not(:disabled) { transform: translateY(1px); }
+    button:disabled { opacity: .42; cursor: not-allowed; }
+
+    button:focus-visible,
+    .ctl:focus-visible,
+    input:focus-visible,
+    summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+    #startBtn {
+      background: linear-gradient(180deg, var(--brand), var(--brand-dim));
+      border-color: var(--brand-dim);
+      color: #00121f;
+      font-weight: 700;
+    }
+
+    #startBtn:hover:not(:disabled) { filter: brightness(1.08); background: linear-gradient(180deg, var(--brand), var(--brand-dim)); }
+
+    #stopBtn:not(:disabled) { border-color: rgba(255, 95, 86, .4); color: #ffc4c0; }
+    #stopBtn:hover:not(:disabled) { background: rgba(255, 95, 86, .12); }
+
+    .dock-spacer { flex: 1 1 auto; }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle input { accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; }
+    .toggle:hover { color: var(--text); }
+
+    /* ---------- settings ---------- */
+    #settings-panel {
+      /* display is driven by the script between "flex" and "none" — keep this
+         a column flex container so the toggle keeps working. */
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    #settings-panel h2 {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: .13em;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12.5px; color: var(--muted); font-weight: 550; }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 11px 13px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: #0b1119;
+      color: var(--text);
+      font: 13.5px var(--mono);
+    }
+
+    input::placeholder { color: #55677d; }
+    input:focus { border-color: var(--brand); outline: none; }
+
+    #saveBtn { align-self: flex-start; }
+
+    #settings-note { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    #settings-note code {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      background: #0b1119;
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: #a9defd;
+    }
+
+    /* ---------- console ---------- */
+    .logwrap {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .logwrap summary {
+      cursor: pointer;
+      padding: 12px 16px;
+      font-size: 11px;
+      letter-spacing: .13em;
+      color: var(--muted);
+      font-weight: 650;
+      user-select: none;
+      list-style: none;
+    }
+
+    .logwrap summary::-webkit-details-marker { display: none; }
+    .logwrap summary::before { content: "▸ "; display: inline-block; transition: transform .15s ease; }
+    .logwrap[open] summary::before { content: "▾ "; }
+    .logwrap summary:hover { color: var(--text); }
+
+    #log {
+      margin: 0;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-soft);
+      max-height: 320px;
+      overflow: auto;
+      font: 11.5px/1.65 var(--mono);
+      color: #9fb3c8;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0a0f16;
+    }
+
+    /* ---------- responsive ---------- */
+    @media (max-width: 640px) {
+      .app { padding: 14px 14px 40px; gap: 14px; }
+      .topbar { flex-wrap: wrap; gap: 10px; }
+      .brand svg { width: 108px; }
+      .dock { padding: 12px; }
+      .dock-spacer { display: none; }
+      #startBtn, #stopBtn { flex: 1 1 auto; }
+      .stage-controls { opacity: 1; transform: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <header class="topbar">
+      <div class="brand-group">
+        <a class="brand" href="https://anedya.io" target="_blank" rel="noopener">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 427.45 85.62" role="img" aria-label="Anedya">
+            <style>
+              .st0 {
+                fill: #FFFFFF;
+              }
+
+              .st1 {
+                fill: #1FA2FF;
+              }
+            </style>
+            <g>
+              <g>
+                <polygon class="st0"
+                  points="115.61,23.38 105.39,23.38 89.02,62.25 96.34,62.25 110.53,28.24 124.71,62.25 131.98,62.25 ">
+                </polygon>
+                <path class="st0" d="M186.3,23.38v29.88l-19.94-29.88h-10.78v38.88h7.54V31.53l20.49,30.73h10.22V23.38H186.3z">
+                </path>
+                <rect x="219.7" y="23.38" class="st0" width="28.97" height="6.52"></rect>
+                <rect x="213.91" y="23.38" class="st0" width="6.52" height="38.88"></rect>
+                <rect x="219.7" y="39.56" class="st0" width="28.97" height="6.52"></rect>
+                <rect x="219.7" y="55.74" class="st0" width="28.97" height="6.52"></rect>
+                <path class="st0"
+                  d="M307.39,25.81c-1.62-1.62-3.55-2.42-5.81-2.42H269.8v38.88h31.77c2.26,0,4.2-0.81,5.81-2.42 c1.59-1.59,2.4-3.53,2.4-5.79V31.6C309.79,29.36,308.98,27.42,307.39,25.81z M302.79,51.81c0,0.97-0.35,1.78-1.04,2.45 c-0.69,0.67-1.5,1.02-2.47,1.02h-22.52V30.35h22.52c0.97,0,1.78,0.35,2.47,1.04s1.04,1.52,1.04,2.49V51.81z">
+                </path>
+                <path class="st0"
+                  d="M361.89,23.38l-10.41,17.58L341.1,23.38h-7.98l14.63,24.18v14.7h7.54v-14.7l14.63-24.18H361.89z"></path>
+                <polygon class="st0"
+                  points="411.08,23.38 400.86,23.38 384.5,62.25 391.81,62.25 406,28.24 420.19,62.25 427.45,62.25 "></polygon>
+              </g>
+              <g>
+                <path class="st1"
+                  d="M71.96,34.55L54.24,16.83c-0.04,0.29-0.12,0.57-0.26,0.83c0.81,3.11,1.77,10.17-4.02,15.96L2.83,80.75 c-1.7,1.7-0.51,4.61,1.9,4.63l30.21,0.25c1.65,0.01,3.24-0.64,4.4-1.8l32.63-32.63C76.56,46.6,76.56,39.15,71.96,34.55z">
+                </path>
+                <path class="st1"
+                  d="M35.32,5.38H19.33c-1.49,0-2.69-1.2-2.69-2.69v0c0-1.49,1.2-2.69,2.69-2.69l15.98,0 c1.49,0,2.69,1.2,2.69,2.69v0C38.01,4.18,36.8,5.38,35.32,5.38z">
+                </path>
+                <path class="st1"
+                  d="M43.7,13.41H27.72c-1.49,0-2.69-1.2-2.69-2.69v0c0-1.49,1.2-2.69,2.69-2.69H43.7c1.49,0,2.69,1.2,2.69,2.69v0 C46.39,12.21,45.18,13.41,43.7,13.41z">
+                </path>
+                <path class="st1"
+                  d="M54.88,21.44H36.37c-1.49,0-2.69-1.2-2.69-2.69v0c0-1.49,1.2-2.69,2.69-2.69h15.98c1.49,0,2.69,1.2,2.69,2.69 v0C55.04,20.24,56.36,21.44,54.88,21.44z">
+                </path>
+                <path class="st1" d="M58.24,24.09H44.75c-1.49,0-2.69,1.2-2.69,2.69c0,1.49,1.2,2.69,2.69,2.69h13.49V24.09z">
+                </path>
+                <circle class="st1" cx="11.34" cy="2.69" r="2.69"></circle>
+                <circle class="st1" cx="2.69" cy="2.69" r="2.69"></circle>
+                <circle class="st1" cx="19.72" cy="10.72" r="2.69"></circle>
+                <circle class="st1" cx="11.07" cy="10.72" r="2.69"></circle>
+                <circle class="st1" cx="28.38" cy="18.75" r="2.69"></circle>
+                <circle class="st1" cx="19.72" cy="18.75" r="2.69"></circle>
+                <circle class="st1" cx="36.8" cy="26.78" r="2.69"></circle>
+                <circle class="st1" cx="28.14" cy="26.78" r="2.69"></circle>
+                <circle class="st1" cx="45.45" cy="35.06" r="2.69"></circle>
+                <circle class="st1" cx="36.8" cy="35.06" r="2.69"></circle>
+              </g>
+            </g>
+          </svg>
+        </a>
+        <div class="brand-divider"></div>
+        <div class="titles">
+          <h1>Camera Streaming</h1>
+          <p>WebRTC live view &middot; BK7258</p>
+        </div>
+      </div>
+
+      <span id="deviceStatus" class="pill unknown">Device: &mdash;</span>
+    </header>
+
+    <div class="statusbar">
+      <span id="status">Idle</span>
+      <span id="networkMode">Mode: --</span>
+    </div>
+
+    <div class="stage-shell">
+      <div class="video-panel" id="videoPanel" hidden>
+        <video id="preview" autoplay playsinline></video>
+
+        <div class="stage-controls">
+          <!-- Direction is spelled out in the titles: "mic" and "speaker" are
+               both ambiguous on a two-way link, since each end has one. -->
+          <button class="ctl" id="micBtn" type="button"
+                  title="Mute your microphone — stops the audio you send to the camera's speaker">&#127908; Mic</button>
+          <button class="ctl" id="muteBtn" type="button"
+                  title="Mute incoming audio — stops the camera's microphone playing here">&#128266; Speaker</button>
+          <button class="ctl" id="flipV" type="button" title="Flip vertically">&#8597; Flip V</button>
+          <button class="ctl" id="flipH" type="button" title="Flip horizontally">&#8596; Flip H</button>
+          <button class="ctl" id="fsBtn" type="button" title="Fullscreen">Fullscreen</button>
+        </div>
+
+        <div class="watermark" aria-hidden="true">
+          <span>Powered By</span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 427.45 85.62" role="img" aria-label="Anedya">
+            <g>
+              <g>
+                <polygon class="st0"
+                  points="115.61,23.38 105.39,23.38 89.02,62.25 96.34,62.25 110.53,28.24 124.71,62.25 131.98,62.25 ">
+                </polygon>
+                <path class="st0"
+                  d="M186.3,23.38v29.88l-19.94-29.88h-10.78v38.88h7.54V31.53l20.49,30.73h10.22V23.38H186.3z"></path>
+                <rect x="219.7" y="23.38" class="st0" width="28.97" height="6.52"></rect>
+                <rect x="213.91" y="23.38" class="st0" width="6.52" height="38.88"></rect>
+                <rect x="219.7" y="39.56" class="st0" width="28.97" height="6.52"></rect>
+                <rect x="219.7" y="55.74" class="st0" width="28.97" height="6.52"></rect>
+                <path class="st0"
+                  d="M307.39,25.81c-1.62-1.62-3.55-2.42-5.81-2.42H269.8v38.88h31.77c2.26,0,4.2-0.81,5.81-2.42 c1.59-1.59,2.4-3.53,2.4-5.79V31.6C309.79,29.36,308.98,27.42,307.39,25.81z M302.79,51.81c0,0.97-0.35,1.78-1.04,2.45 c-0.69,0.67-1.5,1.02-2.47,1.02h-22.52V30.35h22.52c0.97,0,1.78,0.35,2.47,1.04s1.04,1.52,1.04,2.49V51.81z">
+                </path>
+                <path class="st0"
+                  d="M361.89,23.38l-10.41,17.58L341.1,23.38h-7.98l14.63,24.18v14.7h7.54v-14.7l14.63-24.18H361.89z"></path>
+                <polygon class="st0"
+                  points="411.08,23.38 400.86,23.38 384.5,62.25 391.81,62.25 406,28.24 420.19,62.25 427.45,62.25 ">
+                </polygon>
+              </g>
+              <g>
+                <path class="st1"
+                  d="M71.96,34.55L54.24,16.83c-0.04,0.29-0.12,0.57-0.26,0.83c0.81,3.11,1.77,10.17-4.02,15.96L2.83,80.75 c-1.7,1.7-0.51,4.61,1.9,4.63l30.21,0.25c1.65,0.01,3.24-0.64,4.4-1.8l32.63-32.63C76.56,46.6,76.56,39.15,71.96,34.55z">
+                </path>
+                <path class="st1"
+                  d="M35.32,5.38H19.33c-1.49,0-2.69-1.2-2.69-2.69v0c0-1.49,1.2-2.69,2.69-2.69l15.98,0 c1.49,0,2.69,1.2,2.69,2.69v0C38.01,4.18,36.8,5.38,35.32,5.38z">
+                </path>
+                <path class="st1"
+                  d="M43.7,13.41H27.72c-1.49,0-2.69-1.2-2.69-2.69v0c0-1.49,1.2-2.69,2.69-2.69H43.7c1.49,0,2.69,1.2,2.69,2.69v0 C46.39,12.21,45.18,13.41,43.7,13.41z">
+                </path>
+                <path class="st1"
+                  d="M54.88,21.44H36.37c-1.49,0-2.69-1.2-2.69-2.69v0c0-1.49,1.2-2.69,2.69-2.69h15.98c1.49,0,2.69,1.2,2.69,2.69 v0C55.04,20.24,56.36,21.44,54.88,21.44z">
+                </path>
+                <path class="st1" d="M58.24,24.09H44.75c-1.49,0-2.69,1.2-2.69,2.69c0,1.49,1.2,2.69,2.69,2.69h13.49V24.09z">
+                </path>
+                <circle class="st1" cx="11.34" cy="2.69" r="2.69"></circle>
+                <circle class="st1" cx="2.69" cy="2.69" r="2.69"></circle>
+                <circle class="st1" cx="19.72" cy="10.72" r="2.69"></circle>
+                <circle class="st1" cx="11.07" cy="10.72" r="2.69"></circle>
+                <circle class="st1" cx="28.38" cy="18.75" r="2.69"></circle>
+                <circle class="st1" cx="19.72" cy="18.75" r="2.69"></circle>
+                <circle class="st1" cx="36.8" cy="26.78" r="2.69"></circle>
+                <circle class="st1" cx="28.14" cy="26.78" r="2.69"></circle>
+                <circle class="st1" cx="45.45" cy="35.06" r="2.69"></circle>
+                <circle class="st1" cx="36.8" cy="35.06" r="2.69"></circle>
+              </g>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="stage-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M23 7l-7 5 7 5V7z"></path>
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+        </svg>
+        <strong>No stream</strong>
+        <span>Press Start Handshake to negotiate a connection with the camera.</span>
+      </div>
+    </div>
+
+    <div class="dock">
+      <button id="startBtn" type="button">Start Handshake</button>
+      <button id="stopBtn" type="button" disabled>Stop</button>
+
+      <label class="toggle">
+        <input id="forceRelay" type="checkbox">
+        <span>Force TURN relay</span>
+      </label>
+
+      <span class="dock-spacer"></span>
+      <button id="settingsBtn" type="button">Settings</button>
+    </div>
+
+    <div id="settings-panel">
+      <h2>SETTINGS</h2>
+      <div class="field">
+        <label for="namespaceId">Anedya Node ID</label>
+        <input id="namespaceId" type="text" placeholder="Node UUID" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="apiKey">Platform API Key</label>
+        <input id="apiKey" type="password" placeholder="Bearer token or raw token" autocomplete="off">
+      </div>
+      <button id="saveBtn" type="button">Save Settings</button>
+      <div id="settings-note">Node ID and API key are stored in this browser via localStorage. Prefix key with
+        <code>Bearer</code> if your token needs it.
+      </div>
+    </div>
+
+    <details class="logwrap" open>
+      <summary>CONSOLE</summary>
+      <pre id="log"></pre>
+    </details>
+
+  </div>
+
+  <script>
+    const API_BASE = "https://api.ap-in-1.anedya.io/v1";
+    const STORAGE = {
+      namespaceId: "esp-peer-test.namespaceId",
+      apiKey: "esp-peer-test.apiKey",
+      forceRelay: "esp-peer-test.forceRelay",
+    };
+
+    const statusEl = document.getElementById("status");
+    const networkModeEl = document.getElementById("networkMode");
+    const deviceStatusEl = document.getElementById("deviceStatus");
+    const logEl = document.getElementById("log");
+    const videoPanelEl = document.getElementById("videoPanel");
+    const previewEl = document.getElementById("preview");
+    const settingsPanelEl = document.getElementById("settings-panel");
+    const settingsBtn = document.getElementById("settingsBtn");
+    const namespaceIdEl = document.getElementById("namespaceId");
+    const apiKeyEl = document.getElementById("apiKey");
+    const forceRelayEl = document.getElementById("forceRelay");
+    const saveBtn = document.getElementById("saveBtn");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    let pc = null;
+    let dc = null;
+    let pollTimer = null;
+    let connectTimer = null;
+    let statsTimer = null;
+    let lastFrameUrl = null;
+    /* The browser mic track being sent to the device's speaker. Top-level
+       `let` in a classic script lives in the shared global lexical scope, so
+       the media-controls block at the end of the page can reach it; it is read
+       inside click handlers, which run long after this is assigned. Null
+       whenever no mic is attached (permission denied, or not streaming). */
+    let micTrack = null;
+    /* Real implementation is installed by the media-controls block at the end
+       of the page. Stubbed here so callers defined above it can never hit a
+       ReferenceError, whatever order things end up running in. */
+    let syncMediaButtons = () => {};
+    let frameCount = 0;
+    let statsStartMs = 0;
+    let statsLastReportMs = 0;
+    let statsWindowFrames = 0;
+    let statsWindowBytes = 0;
+    let statsTotalBytes = 0;
+    const VERBOSE_FRAME_LOG = false;
+
+    namespaceIdEl.value = localStorage.getItem(STORAGE.namespaceId) || "";
+    apiKeyEl.value = localStorage.getItem(STORAGE.apiKey) || "";
+    forceRelayEl.checked = localStorage.getItem(STORAGE.forceRelay) === "true";
+    settingsPanelEl.style.display = (!namespaceIdEl.value || !apiKeyEl.value) ? "flex" : "none";
+
+    settingsBtn.addEventListener("click", () => {
+      settingsPanelEl.style.display = settingsPanelEl.style.display === "flex" ? "none" : "flex";
+    });
+
+    function log(message) {
+      const stamp = new Date().toLocaleTimeString();
+      logEl.textContent += `[${stamp}] ${message}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus(text, kind = "") {
+      statusEl.textContent = text;
+      statusEl.className = kind;
+    }
+
+    // Shows whether media is flowing direct (P2P) or via the TURN relay.
+    function setNetworkMode(mode) {
+      networkModeEl.textContent = `Mode: ${mode}`;
+      networkModeEl.className = mode === "TURN" ? "turn" : mode === "P2P" ? "p2p" : "";
+    }
+
+    function apiKey() {
+      const value = apiKeyEl.value.trim();
+      if (!value) throw new Error("Missing Platform API key");
+      return value.startsWith("Bearer ") ? value : `Bearer ${value}`;
+    }
+
+    function namespaceId() {
+      const value = namespaceIdEl.value.trim();
+      if (!value) throw new Error("Missing Anedya Node ID");
+      return value;
+    }
+
+    function headers() {
+      return {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": apiKey(),
+      };
+    }
+
+
+    // Ask Anedya whether the node has heartbeated recently. Throws if the device
+    // is offline (or the status can't be determined), so the caller can abort
+    // before spending time on the WebRTC handshake against a dead device.
+    // Device heartbeats every 30 s (see anedya_signaling.c). 90 s tolerates one
+    // or two missed beats before we call it offline.
+    // --- Device online/offline status badge --------------------------------
+    // Live indicator polled from Anedya's health API. Separate from the
+    // start-time gate below (checkNodeOnline), and non-throwing so the poll
+    // keeps running through transient errors.
+    const DEVICE_STATUS_POLL_MS = 10000;
+    let deviceStatusTimer = null;
+
+    function setDeviceStatus(state, text) {
+      deviceStatusEl.className = state; // 'online' | 'offline' | 'unknown'
+      deviceStatusEl.textContent = text;
+    }
+
+    async function refreshDeviceStatus() {
+      const node = namespaceIdEl.value.trim();
+      if (!node) { setDeviceStatus("unknown", "Device: set Node ID"); return; }
+      if (!apiKeyEl.value.trim()) { setDeviceStatus("unknown", "Device: set API key"); return; }
+      try {
+        const resp = await fetch(`${API_BASE}/health/status`, {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ nodes: [node], lastContactThreshold: 90 }),
+        });
+        if (!resp.ok) throw new Error(`status ${resp.status}`);
+        const json = await resp.json();
+        const info = json.data?.[node];
+        if (json.success === false || !info) throw new Error("no data");
+        if (info.online) {
+          const t = info.lastHeartbeat
+            ? new Date(info.lastHeartbeat * 1000).toLocaleTimeString()
+            : "—";
+          setDeviceStatus("online", `Device: ONLINE (last ${t})`);
+        } else {
+          const t = info.lastHeartbeat
+            ? new Date(info.lastHeartbeat * 1000).toLocaleString()
+            : "never";
+          setDeviceStatus("offline", `Device: OFFLINE (last ${t})`);
+        }
+      } catch (_) {
+        setDeviceStatus("unknown", "Device: status unknown");
+      }
+    }
+
+    function startDeviceStatusPolling() {
+      if (deviceStatusTimer) clearInterval(deviceStatusTimer);
+      refreshDeviceStatus();
+      deviceStatusTimer = setInterval(refreshDeviceStatus, DEVICE_STATUS_POLL_MS);
+    }
+
+    async function checkNodeOnline(thresholdSeconds = 90) {
+      const node = namespaceId();
+      const resp = await fetch(`${API_BASE}/health/status`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ nodes: [node], lastContactThreshold: thresholdSeconds }),
+      });
+      if (!resp.ok) {
+        throw new Error(`Health check failed: ${resp.status} ${await resp.text()}`);
+      }
+      const json = await resp.json();
+      if (json.success === false) {
+        throw new Error(`Health check error: ${json.error || json.reasonCode || "unknown"}`);
+      }
+      const info = json.data?.[node];
+      if (!info) {
+        throw new Error("Health check returned no data for this node");
+      }
+      if (!info.online) {
+        const last = info.lastHeartbeat
+          ? new Date(info.lastHeartbeat * 1000).toLocaleString()
+          : "never";
+        throw new Error(`Device is OFFLINE (last heartbeat: ${last})`);
+      }
+      log(`Device is online (last heartbeat: ${new Date(info.lastHeartbeat * 1000).toLocaleTimeString()})`);
+    }
+
+    async function fetchTurnCredentials() {
+      const resp = await fetch(`${API_BASE}/relay/create`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ relayType: 'turn' }),
+      });
+      if (!resp.ok) throw new Error(`TURN fetch failed: ${resp.status}`);
+      const json = await resp.json();
+      if (!json.relayData) throw new Error(json.error || 'no relayData');
+      return {
+        ...json.relayData,
+        password: json.relayData.credential,
+        relayExpiry: json.relayExpiry,
+      };
+    }
+
+    async function deflateRaw(str) {
+      const encoded = new TextEncoder().encode(str);
+      const cs = new CompressionStream("deflate-raw");
+      const writer = cs.writable.getWriter();
+      writer.write(encoded);
+      writer.close();
+      const chunks = [];
+      const reader = cs.readable.getReader();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const buf = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) { buf.set(c, offset); offset += c.length; }
+      return buf;
+    }
+
+    function uint8ToBase64(buf) {
+      let binary = "";
+      for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
+      return btoa(binary);
+    }
+
+    function base64ToUint8(b64) {
+      const binary = atob(b64);
+      const buf = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+      return buf;
+    }
+
+    async function inflateRaw(buf) {
+      const ds = new DecompressionStream("deflate-raw");
+      const writer = ds.writable.getWriter();
+      writer.write(buf);
+      writer.close();
+      const chunks = [];
+      const reader = ds.readable.getReader();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const out = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) { out.set(c, offset); offset += c.length; }
+      return new TextDecoder().decode(out);
+    }
+
+    // Send the WebRTC offer as the "webrtc_offer" command. The returned
+    // commandId is the correlation key: the ESP answers by attaching the SDP
+    // answer as this command's ackdata. Returns the commandId.
+    async function sendOfferViaCommand(offerPayload) {
+      const compressed = await deflateRaw(offerPayload);
+      const b64 = uint8ToBase64(compressed);
+      log(`Offer: raw=${offerPayload.length}B → deflate=${compressed.length}B → base64=${b64.length}B`);
+      if (b64.length > 950) {
+        log(`WARNING: payload is ${b64.length} bytes, which might be rejected by Anedya!`);
+      }
+      const response = await fetch(`${API_BASE}/commands/send`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          nodeId: namespaceId(),
+          command: "webrtc_offer",
+          data: b64,
+          type: "string",
+          expiry: Date.now() + 300_000,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Command send failed: ${response.status} ${await response.text()}`);
+      }
+      const json = await response.json();
+      // The send response carries the command id; field name has varied
+      // (commandId / id / commandID), so accept whichever is present.
+      const commandId = json.commandId || json.id || json.commandID;
+      if (!commandId) {
+        throw new Error(`Command send returned no id: ${JSON.stringify(json)}`);
+      }
+      log(`Command sent: commandId=${commandId}`);
+      return commandId;
+    }
+
+    // Poll a command's full details. Returns the command object including
+    // status, ackdata (base64 of deflate-raw answer SDP) and ackdatatype.
+    async function getCommandStatus(commandId) {
+      const response = await fetch(`${API_BASE}/commands/getDetails`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ commandId }),
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    }
+
+    function waitForIceGatheringComplete(peerConnection, timeoutMs = 15000) {
+      if (peerConnection.iceGatheringState === "complete") return Promise.resolve();
+      return new Promise((resolve) => {
+        const timeout = setTimeout(resolve, timeoutMs);
+        peerConnection.addEventListener("icegatheringstatechange", () => {
+          if (peerConnection.iceGatheringState === "complete") {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+      });
+    }
+
+    // keepStatus: when true, don't overwrite the status badge (the caller has
+    // already set an error/failure message that should stay visible).
+    function stop(keepStatus = false) {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      if (connectTimer) {
+        clearTimeout(connectTimer);
+        connectTimer = null;
+      }
+      if (statsTimer) {
+        clearInterval(statsTimer);
+        statsTimer = null;
+      }
+      if (dc) {
+        dc.close();
+        dc = null;
+      }
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+      if (lastFrameUrl) {
+        URL.revokeObjectURL(lastFrameUrl);
+        lastFrameUrl = null;
+      }
+      /* Release the capture device explicitly. pc.close() drops the sender but
+         does not stop the underlying track, so the OS/browser microphone-in-use
+         indicator would stay lit after stopping — which looks like the page is
+         still listening. */
+      if (micTrack) {
+        micTrack.stop();
+        micTrack = null;
+      }
+      syncMediaButtons();
+      previewEl.removeAttribute("src");
+      previewEl.style.display = "none";
+      videoPanelEl.hidden = true;
+      frameCount = 0;
+      statsStartMs = 0;
+      statsLastReportMs = 0;
+      statsWindowFrames = 0;
+      statsWindowBytes = 0;
+      statsTotalBytes = 0;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      setNetworkMode("--");
+      if (!keepStatus) setStatus("Stopped");
+      log("Stopped");
+    }
+
+    saveBtn.addEventListener("click", () => {
+      localStorage.setItem(STORAGE.namespaceId, namespaceIdEl.value.trim());
+      localStorage.setItem(STORAGE.apiKey, apiKeyEl.value.trim());
+      localStorage.setItem(STORAGE.forceRelay, forceRelayEl.checked ? "true" : "false");
+      settingsPanelEl.style.display = "none";
+      log("Settings saved");
+      // Re-check device status immediately against the new node/key.
+      startDeviceStatusPolling();
+    });
+
+    stopBtn.addEventListener("click", () => stop());
+
+    startBtn.addEventListener("click", async () => {
+      try {
+        logEl.textContent = "";
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        // Bail out early if the ESP isn't online — no point handshaking a device
+        // that hasn't heartbeated. checkNodeOnline throws when offline.
+        setStatus("Checking device status...");
+        await checkNodeOnline();
+
+        setStatus("Creating offer...");
+
+        const iceServers = [{ urls: "stun:turn1.ap-in-1.anedya.io:3478" }];
+        let turnCreds = null;
+        try {
+          turnCreds = await fetchTurnCredentials();
+          iceServers.push({
+            urls: "turn:turn1.ap-in-1.anedya.io:3478",
+            username: turnCreds.username,
+            credential: turnCreds.password,
+          });
+          log("Fetched Anedya TURN credentials");
+        } catch (error) {
+          log(`TURN fetch failed, continuing with STUN only: ${error.message}`);
+        }
+
+        // "all" lets ICE pick the best path (direct srflx if possible, relay if
+        // not). "relay" forces the browser to send only relay candidates, so the
+        // only viable pair is browser-relay <-> esp-relay — use it to verify the
+        // TURN path end-to-end. The ESP stays on POLICY_ALL either way (its
+        // relay-only mode has no fallback and is fragile), but it still gathers a
+        // relay candidate, so relay pairing works.
+        const ICE_TRANSPORT_POLICY = forceRelayEl.checked ? "relay" : "all";
+        if (ICE_TRANSPORT_POLICY === "relay" && !turnCreds) {
+          throw new Error("Force-relay is on but TURN credentials could not be fetched");
+        }
+        pc = new RTCPeerConnection({
+          iceServers,
+          iceTransportPolicy: ICE_TRANSPORT_POLICY,
+        });
+        log(`Using ${iceServers.length} ICE server(s) for WebRTC (policy=${ICE_TRANSPORT_POLICY})`);
+
+        // Video stays recvonly — we only ever want the camera feed, never send
+        // one back. Audio is sendrecv: the device now decodes inbound audio to
+        // its onboard speaker (see anedya_cam_audio_data_callback), so this is
+        // real two-way audio, not just a wider offer.
+        const videoTransceiver = pc.addTransceiver("video", { direction: "recvonly" });
+        const audioTransceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
+
+        // Attach the browser's mic to the audio sender. Failure here is not
+        // fatal — receiving the camera feed still works — but it MUST be loud:
+        // the transceiver stays sendrecv either way, so the SDP looks correct
+        // and the device just never receives audio. That is indistinguishable
+        // at the device from a broken speaker path.
+        //
+        // The common cause is opening this page over file://. Chrome treats
+        // that origin as opaque and cannot persist a microphone grant, so
+        // getUserMedia throws NotAllowedError. Serve over http://localhost
+        // (e.g. `python3 -m http.server`) to get a real permission prompt.
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("navigator.mediaDevices unavailable (insecure context?)");
+          }
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const track = micStream.getAudioTracks()[0];
+          if (!track) throw new Error("no audio track in captured stream");
+          await audioTransceiver.sender.replaceTrack(track);
+          micTrack = track;
+          syncMediaButtons();
+          log(`Microphone attached for two-way audio: "${track.label || "default"}"`);
+        } catch (micErr) {
+          micTrack = null;
+          syncMediaButtons();
+          audioTransceiver.direction = "recvonly";
+          log(`*** MICROPHONE NOT ATTACHED: ${micErr.name || "Error"} — ${micErr.message}`);
+          log(`*** Device speaker will stay silent. If this page is on file://, `
+              + `serve it over http://localhost instead.`);
+          setStatus("No microphone — receive only", "err");
+        }
+
+        // Restrict codecs to H264 and PCMA to shrink the SDP size below 1000 bytes!
+        if (typeof RTCRtpReceiver !== 'undefined' && RTCRtpReceiver.getCapabilities) {
+          const videoCodecs = RTCRtpReceiver.getCapabilities("video").codecs;
+          let h264Codecs = videoCodecs.filter(c => c.mimeType.toLowerCase() === "video/h264");
+
+          // Chrome offers ~10 H264 payload types spanning both packetization
+          // modes and several profiles. The BK7258 sends FU-A fragments, which
+          // are only valid under packetization-mode=1, and its encoder is
+          // constrained baseline (42e01f). Narrowing the offer to matching
+          // payload types removes any chance of landing on an incompatible one
+          // and meaningfully shrinks the SDP (which has to survive Anedya's
+          // ~1000-byte command payload budget). Each filter is applied only if
+          // it leaves something behind, so an unusual browser still gets an offer.
+          const pktMode1 = h264Codecs.filter(c => (c.sdpFmtpLine || "").includes("packetization-mode=1"));
+          if (pktMode1.length > 0) h264Codecs = pktMode1;
+          const baseline = h264Codecs.filter(c => (c.sdpFmtpLine || "").includes("profile-level-id=42e01f"));
+          if (baseline.length > 0) h264Codecs = baseline;
+
+          if (h264Codecs.length > 0) videoTransceiver.setCodecPreferences(h264Codecs);
+
+          const audioCodecs = RTCRtpReceiver.getCapabilities("audio").codecs;
+          const pcmaCodecs = audioCodecs.filter(c => c.mimeType.toLowerCase() === "audio/pcma");
+          if (pcmaCodecs.length > 0) audioTransceiver.setCodecPreferences(pcmaCodecs);
+        }
+        
+        log("Added video (recvonly) and audio (sendrecv) transceivers (filtered to H264/PCMA)");
+
+        pc.ontrack = (event) => {
+          if (previewEl.srcObject !== event.streams[0]) {
+            previewEl.srcObject = event.streams[0];
+            videoPanelEl.hidden = false;
+            previewEl.style.display = "block";
+            log(`Received remote track: ${event.track.kind}`);
+            setStatus("Connected! Receiving stream...", "ok");
+          }
+        };
+
+        async function logSelectedCandidatePair() {
+          const stats = await pc.getStats();
+          for (const report of stats.values()) {
+            if (report.type === "transport" && report.selectedCandidatePairId) {
+              const pair = stats.get(report.selectedCandidatePairId);
+              if (!pair) continue;
+              const local = stats.get(pair.localCandidateId);
+              const remote = stats.get(pair.remoteCandidateId);
+              log(`Selected pair: local=${local?.candidateType} remote=${remote?.candidateType} ` +
+                `(${local?.address}:${local?.port} -> ${remote?.address}:${remote?.port})`);
+              if (local?.candidateType === "relay" || remote?.candidateType === "relay") {
+                log("CONFIRMED: traffic is flowing through TURN relay");
+                setNetworkMode("TURN");
+              } else {
+                log("Traffic is NOT using relay (host/srflx direct path)");
+                setNetworkMode("P2P");
+              }
+            }
+          }
+        }
+
+        // The device reports it is emitting RTP (packet counters climb), the PC
+        // reaches "connected", and ontrack fires — yet nothing renders. These
+        // are the receiver-side counters that distinguish the remaining
+        // possibilities: packetsReceived==0 means the packets never arrive
+        // (network/SRTP), packetsReceived>0 with framesDecoded==0 means they
+        // arrive but the decoder rejects them (bitstream/profile), and a
+        // climbing pliCount means Chrome keeps asking for a keyframe it never
+        // successfully gets.
+        async function logInboundStats() {
+          if (!pc) return;
+          try {
+            const stats = await pc.getStats();
+            stats.forEach((r) => {
+              if (r.type === "inbound-rtp" && r.kind === "video") {
+                log(`inbound-rtp video: packets=${r.packetsReceived ?? 0} bytes=${r.bytesReceived ?? 0} ` +
+                    `framesDecoded=${r.framesDecoded ?? 0} keyFrames=${r.keyFramesDecoded ?? 0} ` +
+                    `framesDropped=${r.framesDropped ?? 0} pli=${r.pliCount ?? 0} ` +
+                    `lost=${r.packetsLost ?? 0} frameW=${r.frameWidth ?? "-"} frameH=${r.frameHeight ?? "-"}`);
+                // NACK verification. nack counts requests this browser SENT;
+                // retransmitted* counts the answers it ACCEPTED. Both climbing
+                // means device-side retransmission is working. nack climbing
+                // while retransmittedPacketsReceived stays 0 means the resent
+                // packets are arriving but being discarded — the likely cause
+                // is SRTP replay protection rejecting a duplicate sequence
+                // number, which is what RFC 4588 RTX (separate SSRC and fresh
+                // sequence numbers) exists to avoid.
+                log(`  nack: sent=${r.nackCount ?? 0} ` +
+                    `retransPackets=${r.retransmittedPacketsReceived ?? 0} ` +
+                    `retransBytes=${r.retransmittedBytesReceived ?? 0}`);
+              }
+            });
+          } catch (e) {
+            log(`getStats failed: ${e.message}`);
+          }
+        }
+
+        pc.onconnectionstatechange = () => {
+          log(`PC connectionState: ${pc.connectionState}`);
+          if (pc.connectionState === "connected") {
+            if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+            setStatus("Peer connected", "ok");
+            logSelectedCandidatePair();
+            if (statsTimer) clearInterval(statsTimer);
+            logInboundStats();
+            statsTimer = setInterval(logInboundStats, 3000);
+          } else if (pc.connectionState === "failed") {
+            setStatus("Connection failed", "err");
+            log("Connection failed (ICE/DTLS could not be established)");
+            stop(true);
+          } else if (pc.connectionState === "disconnected") {
+            setStatus("Connection lost", "err");
+            log("Connection lost");
+            stop(true);
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => log(`ICE connectionState: ${pc.iceConnectionState}`);
+        pc.onicegatheringstatechange = () => log(`ICE gatheringState: ${pc.iceGatheringState}`);
+        pc.onsignalingstatechange = () => log(`Signaling state: ${pc.signalingState}`);
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        log("Waiting for browser ICE gathering...");
+        await waitForIceGatheringComplete(pc);
+
+        let rawOfferSdp = pc.localDescription.sdp;
+        // Strip a=extmap lines. They add ~1500 chars to the SDP and Beken ignores them.
+        rawOfferSdp = rawOfferSdp.replace(/^a=extmap:.*\r?\n/gm, "");
+        rawOfferSdp = rawOfferSdp.replace(/^a=msid:.*\r?\n/gm, "");
+        rawOfferSdp = rawOfferSdp.replace(/^a=rtcp-fb:.*\r?\n/gm, "");
+        // Keep "a=ssrc:<id> cname:<x>" — drop only the redundant msid/mslabel/
+        // label variants of the same SSRC.
+        //
+        // This used to strip a=ssrc entirely to save ~500 chars, which was
+        // harmless while both transceivers were recvonly: the browser sent no
+        // media, so Chrome emitted no a=ssrc at all and the device never needed
+        // one. Now that audio is sendrecv, the device demuxes inbound RTP by
+        // SSRC (peer_connection_loop -> remote_assrc) and stripping it left
+        // remote_assrc at 0, so every audio packet the browser sent was
+        // silently discarded and the speaker stayed dead. Only the cname form
+        // is kept because that is the first match the device's parser takes,
+        // and the rest are pure size.
+        rawOfferSdp = rawOfferSdp.replace(/^a=ssrc:\d+ (?:msid|mslabel|label):.*\r?\n/gm, "");
+        rawOfferSdp = rawOfferSdp.replace(/^a=msid-semantic:.*\r?\n/gm, "");
+        
+        // Final squeeze: strip bandwidth modifiers and ice-options
+        rawOfferSdp = rawOfferSdp.replace(/^b=(AS|TIAS):.*\r?\n/gm, "");
+        rawOfferSdp = rawOfferSdp.replace(/^a=ice-options:.*\r?\n/gm, "");
+
+        // Drop TCP ICE candidates. libpeer only speaks UDP (ice.c rejects
+        // anything else outright: "Only UDP transport is supported"), so these
+        // are dead weight — and with the device gathering host+srflx+relay the
+        // offer now bumps against Anedya's ~1KB command payload limit
+        // ("command data size exceeded", errcode 4000).
+        rawOfferSdp = rawOfferSdp.replace(/^a=candidate:.*tcptype.*\r?\n/gm, "");
+        // a=rtcp: is redundant when rtcp-mux is in use, which it always is here.
+        rawOfferSdp = rawOfferSdp.replace(/^a=rtcp:.*\r?\n/gm, "");
+
+        // Strip all carriage returns to save another ~60 bytes
+        rawOfferSdp = rawOfferSdp.replace(/\r\n/g, "\n");
+
+        const offerSdp = rawOfferSdp.replaceAll("a=setup:actpass\n", "a=setup:passive\n");
+        log(`Local offer SDP length: ${offerSdp.length} chars`);
+        if (offerSdp !== rawOfferSdp) {
+          log("Forced offer DTLS setup:passive so ESP initiates DTLS");
+        }
+        log(`Offer m-lines: ${offerSdp.match(/^m=.*$/gm)?.join(" | ")}`);
+        // If this shows more than one or two H264 payload types, the codec
+        // filter above did not take effect (usually a cached page) and the
+        // offer will be ~1KB larger than it needs to be.
+        const videoPts = offerSdp.match(/^m=video[^\n]*/m)?.[0].split(" ").slice(3) || [];
+        log(`Offer video payload types: ${videoPts.length} (${videoPts.join(",")})`);
+        const candTypes = (offerSdp.match(/^a=candidate:.*$/gm) || [])
+          .map(c => (c.match(/typ (\w+)/) || [])[1]).join(",");
+        log(`Offer ICE candidates: ${candTypes || "none"}`);
+        
+        // Remove turn credentials from JSON payload since Beken ignores them entirely,
+        // saving ~150 precious bytes from the final deflated size!
+        const offerPayload = JSON.stringify({
+          type: "offer",
+          sdp: offerSdp
+        });
+        const commandId = await sendOfferViaCommand(offerPayload);
+        log(`Sent compressed offer via Anedya command (id=${commandId})`);
+        log(`Polling command status every 2 seconds...`);
+        setStatus("Waiting for ESP answer...");
+
+        let attempts = 0;
+        let answerApplied = false;
+        let lastAckdataRaw = null;
+        pollTimer = setInterval(async () => {
+          attempts += 1;
+          if (!pc || pc.signalingState === "closed") return;
+          // Once the answer is applied, the browser's own pc.connectionState is
+          // the source of truth; keep polling only to surface the ESP's final
+          // success/failure, but stop nagging the user about a missing answer.
+          if (attempts > 45) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            if (!answerApplied) {
+              setStatus("Timed out waiting for answer", "err");
+              log("Timed out after 90 seconds");
+              stop(true);
+            } else {
+              log("Stopped polling command status (answer already applied)");
+            }
+            return;
+          }
+
+          try {
+            const cmd = await getCommandStatus(commandId);
+            if (!cmd) {
+              log(`Status fetch failed (${attempts})`);
+              return;
+            }
+
+            // The ESP concludes the command "failed" if anything fails
+            // (bad offer, deflate error, or the WebRTC connection failing).
+            if (cmd.status === "failed" || cmd.status === "failure") {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              const reason = cmd.ackdata || cmd.error || "";
+              setStatus("ESP reported failure", "err");
+              log(`Command status=failure: ${reason}`);
+              stop(true);
+              return;
+            }
+
+            // The ESP concludes "success" once its data channel is connected.
+            if (cmd.status === "success") {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              log("Command status=success (ESP confirmed data channel)");
+              return;
+            }
+
+            // The answer JSON rides in ackdata while status is "processing".
+            // The device also republishes ackdata later for each ICE candidate
+            // it discovers (a=ice-options:trickle — it doesn't inline candidates
+            // in the SDP, it sends them one at a time after the answer). Anedya's
+            // ackdata is a single mutable field, not a queue, so we detect a NEW
+            // value by comparing against the last one we saw and process each
+            // change: the first one is the SDP answer, everything after that is
+            // a trickled candidate to feed into addIceCandidate(). A fast burst
+            // of candidates between two 2s polls can still overwrite each other
+            // before we see them — usually fine, ICE only needs one working pair.
+            //
+            // IMPORTANT: do NOT fall back to cmd.data here. cmd.data is the
+            // command's own input payload — i.e. the offer we sent — echoed
+            // back by Anedya. If the device hasn't published ackdata yet
+            // (still processing, or it failed before ever acking), falling
+            // back to cmd.data silently applies our own offer as if it were
+            // the device's answer: setRemoteDescription() gets a type:"offer" SDP,
+            // signaling state goes to the nonsensical "have-remote-offer",
+            // and the "answer" DTLS setup line you see logged is really just
+            // our own forced-passive offer reflected back at us. Only real
+            // ackdata counts as an answer/candidate.
+            const answerRaw = cmd.ackdata;
+            if (answerRaw && answerRaw !== lastAckdataRaw) {
+              lastAckdataRaw = answerRaw;
+              const answerText = await inflateRaw(base64ToUint8(answerRaw));
+              log(`ackdata update: b64=${answerRaw.length}B -> json=${answerText.length} chars`);
+
+              let msgObj;
+              try {
+                msgObj = JSON.parse(answerText);
+              } catch(e) {
+                // Fallback: treat as raw SDP string if not JSON (first answer only)
+                msgObj = { type: "answer", sdp: answerText };
+              }
+
+              if (!answerApplied) {
+                answerApplied = true;
+                const setupLine = msgObj.sdp?.match(/^a=setup:.+$/m)?.[0];
+                if (setupLine) log(`Doorbell answer ${setupLine}`);
+                log(`Answer m-lines: ${msgObj.sdp?.match(/^m=.*$/gm)?.join(" | ")}`);
+                log(`Full answer SDP:\n${msgObj.sdp}`);
+
+                await pc.setRemoteDescription(new RTCSessionDescription(msgObj));
+                log("Applied ESP answer. Waiting for ICE/DTLS/stream...");
+                setStatus("Connecting...");
+
+                // Watchdog: answer applied but if ICE/DTLS never completes (e.g.
+                // same-LAN hairpin), pc.connectionState can hang on "connecting"
+                // forever. Fail loudly after a grace period.
+                connectTimer = setTimeout(() => {
+                  connectTimer = null;
+                  if (pc && pc.connectionState !== "connected") {
+                    setStatus("Connection timed out", "err");
+                    log(`Connection timed out (state=${pc.connectionState}) — could not establish ICE/DTLS`);
+                    stop(true);
+                  }
+                }, 20000);
+              } else if (msgObj.type === "candidate" && msgObj.candidate) {
+                // metaRTC's candidate string may or may not carry the "a=" SDP
+                // prefix; RTCIceCandidateInit.candidate must not have it.
+                const candidateLine = msgObj.candidate.replace(/^a=/, "");
+                log(`Trickled ICE candidate: ${candidateLine}`);
+                try {
+                  // No sdpMid/sdpMLineIndex from the device — mid "0" is safe
+                  // here because both m-lines are BUNDLEd onto one ICE transport.
+                  await pc.addIceCandidate({ candidate: candidateLine, sdpMid: "0" });
+                } catch (candErr) {
+                  log(`addIceCandidate failed: ${candErr.message}`);
+                }
+              } else {
+                log(`Unrecognized ackdata update, ignoring: ${answerText.slice(0, 120)}`);
+              }
+            } else if (!answerApplied) {
+              log(`No answer yet (status=${cmd.status}, ${attempts})`);
+            }
+          } catch (error) {
+            log(`Poll/apply answer error: ${error.message}`);
+          }
+          // 750ms, not 2000: this interval sits directly inside the connection
+          // race. The device starts its ICE checks the moment it publishes its
+          // answer, so every millisecond spent waiting to pick that answer up is
+          // a millisecond it spends checking a peer that is not listening yet.
+        }, 750);
+      } catch (error) {
+        setStatus("Error", "err");
+        log(`Error: ${error.message}`);
+        stopBtn.disabled = true;
+        startBtn.disabled = false;
+      }
+    });
+
+    // Begin polling the device online/offline badge on load.
+    startDeviceStatusPolling();
+  </script>
+
+  <script>
+    /* Video orientation + overlay controls.
+     *
+     * Deliberately a separate IIFE from the signalling script above: it touches
+     * nothing that the offer/answer flow depends on, so it cannot regress it.
+     *
+     * The sensor delivers the picture rotated 180 degrees AND mirrored. Those
+     * two corrections collapse into a single vertical flip: rotate(180deg) is
+     * flipH+flipV, and composing that with the mirror's flipH cancels the
+     * horizontal term and leaves flipV. Hence flipV defaults on, flipH off.
+     * Both are exposed as buttons and persisted, so a differently mounted
+     * sensor is one click away rather than a rebuild.
+     *
+     * This is also why the <video> no longer carries the native `controls`
+     * attribute: a CSS transform on the element flips the browser's own
+     * control bar along with the picture, leaving upside-down buttons. */
+    (function () {
+      const video = document.getElementById("preview");
+      const KEY = { h: "esp-peer-test.flipH", v: "esp-peer-test.flipV" };
+
+      const stored = (k, dflt) => {
+        const raw = localStorage.getItem(k);
+        return raw === null ? dflt : raw === "true";
+      };
+
+      let flipH = stored(KEY.h, false);
+      let flipV = stored(KEY.v, true);
+
+      const btnH = document.getElementById("flipH");
+      const btnV = document.getElementById("flipV");
+      const btnMic = document.getElementById("micBtn");
+      const btnMute = document.getElementById("muteBtn");
+      const btnFs = document.getElementById("fsBtn");
+      const panel = document.getElementById("videoPanel");
+
+      function applyOrientation() {
+        video.style.transform = `scale(${flipH ? -1 : 1}, ${flipV ? -1 : 1})`;
+        btnH.classList.toggle("on", flipH);
+        btnV.classList.toggle("on", flipV);
+        localStorage.setItem(KEY.h, flipH);
+        localStorage.setItem(KEY.v, flipV);
+      }
+
+      btnH.addEventListener("click", () => { flipH = !flipH; applyOrientation(); });
+      btnV.addEventListener("click", () => { flipV = !flipV; applyOrientation(); });
+      applyOrientation();
+
+      /* Mic = outbound (this browser -> the camera's speaker).
+       *
+       * track.enabled = false is the right primitive rather than stopping the
+       * track: it keeps the sender and the negotiated m-line intact and makes
+       * WebRTC transmit silence, so unmuting is instant and needs no
+       * renegotiation. Stopping the track would end the capture and require
+       * re-acquiring the device.
+       *
+       * Speaker = inbound (the camera's mic -> this machine's output), which is
+       * just the <video> element's own mute. Naming both directions explicitly
+       * because "mic" and "speaker" are each ambiguous on a two-way link. */
+      function syncMediaButtonsImpl() {
+        const micLive = !!micTrack;
+        const micMuted = micLive ? !micTrack.enabled : true;
+        btnMic.disabled = !micLive;
+        btnMic.textContent = micMuted ? "\u{1F507} Mic off" : "\u{1F3A4} Mic";
+        btnMic.classList.toggle("muted", micLive && micMuted);
+        btnMic.title = !micLive
+          ? "No microphone attached — nothing is being sent to the camera's speaker"
+          : (micMuted
+              ? "Unmute your microphone — resume sending audio to the camera's speaker"
+              : "Mute your microphone — stops the audio you send to the camera's speaker");
+
+        btnMute.textContent = video.muted ? "\u{1F507} Speaker off" : "\u{1F50A} Speaker";
+        btnMute.classList.toggle("muted", video.muted);
+        btnMute.title = video.muted
+          ? "Unmute incoming audio — resume hearing the camera's microphone"
+          : "Mute incoming audio — stops the camera's microphone playing here";
+      }
+
+      /* Replaces the stub declared alongside micTrack in the main script. */
+      syncMediaButtons = syncMediaButtonsImpl;
+
+      btnMic.addEventListener("click", () => {
+        if (!micTrack) return;
+        micTrack.enabled = !micTrack.enabled;
+        syncMediaButtonsImpl();
+      });
+
+      btnMute.addEventListener("click", () => {
+        video.muted = !video.muted;
+        syncMediaButtonsImpl();
+      });
+
+      /* Covers mutes triggered outside these buttons (keyboard, OS, autoplay
+       * policy starting the element muted). */
+      video.addEventListener("volumechange", syncMediaButtonsImpl);
+      syncMediaButtonsImpl();
+
+      btnFs.addEventListener("click", () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else if (panel.requestFullscreen) {
+          panel.requestFullscreen().catch(() => { /* user gesture / permission */ });
+        }
+      });
+      document.addEventListener("fullscreenchange", () => {
+        btnFs.textContent = document.fullscreenElement ? "Exit" : "Fullscreen";
+      });
+    })();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,203 @@
+
+# Media
+CONFIG_MEDIA_MAJOR=n
+CONFIG_MEDIA_SCALE=y
+CONFIG_MEDIA_PIPELINE=y
+
+# Image storage
+CONFIG_IMAGE_STORAGE=n
+
+# Video transfer
+CONFIG_WIFI_TRANSFER=y
+CONFIG_TRANS_APP_TASK_SIZE=1536
+CONFIG_INTEGRATION_DOORBELL=y
+CONFIG_INTEGRATION_DOORBELL_CS2=n
+CONFIG_CS2_P2P_SERVER=n
+#CONFIG_CS2_TX_BUFFER_THD=262144
+
+# Audio
+CONFIG_AUDIO=y
+CONFIG_AUDIO_RING_BUFF=y
+CONFIG_AUDIO_ADC=y
+CONFIG_AUDIO_DAC=y
+CONFIG_AUDIO_TEST=n
+CONFIG_FREERTOS_USE_QUEUE_SETS=y
+CONFIG_ADK=y
+#CONFIG_ADK_AUTO_TEST=y
+#CONFIG_ADK_AUTO_TEST_PIPELINE=y
+#CONFIG_ADK_AUTO_TEST_ELEMENT=y
+#CONFIG_ADK_AUTO_TEST_EVENT=y
+CONFIG_ADK_DEBUG_UTILS=y
+CONFIG_ADK_USE_PSRAM=y
+CONFIG_ADK_RAW_STREAM=y
+CONFIG_ADK_ONBOARD_SPEAKER_STREAM=y
+#CONFIG_ADK_ONBOARD_SPEAKER_STREAM_TEST=y
+CONFIG_ADK_ONBOARD_MIC_STREAM=y
+#CONFIG_ADK_ONBOARD_MIC_STREAM_TEST=y
+CONFIG_ADK_UAC_SPEAKER_STREAM=y
+#CONFIG_ADK_UAC_SPEAKER_STREAM_TEST=y
+CONFIG_ADK_UAC_MIC_STREAM=y
+CONFIG_ADK_UART_STREAM=y
+CONFIG_ADK_AEC_V3_ALGORITHM=y
+CONFIG_AUD_AI_NS_SUPPORT=y
+CONFIG_ADK_G711_ENCODER=y
+CONFIG_ADK_G711_DECODER=y
+
+
+CONFIG_VOICE_READ_SERVICE=y
+CONFIG_VOICE_WRITE_SERVICE=y
+CONFIG_VOICE_SERVICE=y
+CONFIG_VOICE_SERVICE_USE_PSRAM=y
+#CONFIG_VOICE_SERVICE_TEST=y
+CONFIG_ADK_ONBOARD_DUAL_DMIC_MIC_STREAM=y
+CONFIG_AUDIO_DMIC=y
+
+# DVP CAMERA
+CONFIG_DVP_CAMERA=y
+CONFIG_DVP_CAMERA_I2C_ID=1
+CONFIG_DVP_POWER_GPIO_CTRL=y
+CONFIG_DVP_CTRL_POWER_GPIO_ID=28
+
+#
+# USB configuration
+#
+CONFIG_USB=y
+CONFIG_USB_VBAT_CONTROL_GPIO_ID=0x1C
+CONFIG_CHERRY_USB=y
+CONFIG_USB_HOST=y
+CONFIG_TASK_USB_PRIO=2
+CONFIG_USBH_UVC=y
+CONFIG_USBH_UAC=y
+CONFIG_USB_HUB_MULTIPLE_DEVICES=y
+CONFIG_USBHOST_HUB_MAX_EHPORTS=4
+CONFIG_USBHOST_HUB_PORT_SUPPORT_MAX_DEVICE=5
+CONFIG_USBHOST_HUB_PORT_1_VBAT_CONTROL_GPIO_ID=0
+CONFIG_USB_CDC=n
+CONFIG_USB_CDC_ACM_DEMO=n
+CONFIG_USBHOST_MAX_CDC_ACM_CLASS=1
+CONFIG_USB_CAMERA=y
+
+# end of USB configuration
+
+
+# BT & Multimedia
+# CONFIG_BLUETOOTH_AP defaults to y in ap/components/bk_bluetooth/Kconfig and
+# was never overridden here, which is what made bk_bluetooth_init() run at
+# boot ("bluetoot:W bk_bluetooth_init...") despite CONFIG_BT=n in the board
+# defconfig — BT isn't used by this project at all, so disable it outright.
+CONFIG_BLUETOOTH_AP=n
+CONFIG_BT_REUSE_MEDIA_MEMORY=y
+CONFIG_BLUETOOTH_HOST_ONLY=y
+CONFIG_BLUETOOTH_BLE_SLAVE_ONLY=y
+
+# YUV_BUF/H264/JPEGENC
+CONFIG_YUV_BUF=y
+CONFIG_H264=y
+CONFIG_JPEGENC_HW=y
+CONFIG_H264_QUALITY_LEVEL=2
+
+# Capture-side frame buffer sizing.
+#
+# CONFIG_JPEG_FRAME_SIZE is the capacity of each buffer bk_uvc.c accumulates a
+# UVC MJPEG frame into. MJPEG is intra-only, so frame size tracks scene detail
+# directly, and at 720p the stock 102400 (100 KB) is not enough for
+# high-entropy scenes — pointing the camera at a laptop screen (fine text, high
+# contrast, no flat regions) overruns it continuously:
+#
+#   uvc_stre: Frame buffer overflow: current=102320, need=640
+#   jpeg hw_: decoder_error, 102392, ...
+#   trs_app:  read frame NULL timeout
+#
+# The overflow sets packet_error, so the frame is discarded mid-assembly; the
+# decoder then chokes on a truncated JPEG, no H.264 frame is produced, and the
+# browser eventually PLIs. That path is entirely upstream of the network — it
+# is a capture-side truncation, not packet loss.
+#
+# 204800 is the Kconfig maximum (range 0 204800). An intermediate step at
+# 131072 was still overflowed by the laptop-screen case (observed
+# current=130960), so this goes straight to the cap.
+#
+# Budget. Both pools draw on the SAME slab — frame_buffer_fb_malloc() routes
+# IMAGE_MJPEG *and* IMAGE_H264 to frame_buffer_encode_malloc(); only IMAGE_YUV
+# goes to DISPLAY — so the two sizes must be costed together:
+#
+#   PSRAM_MEM_SLAB_ENCODE  = 0x157000 = 1404928 B  (partitions/bk7258/ram_regions.csv,
+#                                                   grown from the stock 0x0E7000)
+#   MJPEG pool  4 buffers  (COMM_FRAME_LIST_MAX_NODE = FRAME_LIST_NODE_MAX - 2)
+#   H.264 pool  4 buffers  (H26X_FRAME_LIST_MAX_NODE, CONFIG_MEDIA_PSRAM_SIZE_4M=y)
+#   4 * 204800 + 4 * 122880 = 1310720 B, leaving 94208 B (6.7%) spare
+#
+# That spare is deliberate. An earlier attempt sized these to 98.7% of the slab
+# on the arithmetic alone and the allocator failed anyway:
+#
+#   frame_bu: frame_buffer_fb_malloc 599 malloc fail, img_format:4   (MJPEG)
+#   frame_bu: frame_buffer_fb_malloc 599 malloc fail, img_format:8   (H.264)
+#   uvc_stre: uvc_camera_stream_eof_handle, 1143 malloc frame fail, length:75742
+#
+# Each buffer also carries sizeof(frame_buffer_t) + 32 B alignment, and the
+# heap has its own block headers and fragmentation. Do not size these past
+# ~95% of the slab.
+CONFIG_JPEG_FRAME_SIZE=204800
+
+# Raised from the 102400 default: the H.264 encoder was seen overshooting it
+# (h264_pip: h264_encode_finish_handle, 103024-102400) on scene changes, which
+# is the same truncation failure one stage further down the pipeline. Typical
+# frames here are 17-40 KB and a 720p IDR ~75 KB, so 120 KB is ~60% headroom
+# over the IDR and covers the observed overshoot.
+CONFIG_H264_FRAME_SIZE=122880
+
+# LCD
+CONFIG_SW_ROTATE_TO_YUYV_AND_DMA2D_TO_YUYV_NOT_RGB888=y
+CONFIG_CLI_MEDIA=y
+CONFIG_SOFTWARE_DECODE_SRAM_MAPPING=y
+CONFIG_JPEGDEC_HW_SUPPORT_DRI=y
+CONFIG_GPIO_DEFAULT_SET_SUPPORT=y
+CONFIG_USR_GPIO_CFG_EN=y
+CONFIG_WIFI_VNET_CONTROLLER=y
+CONFIG_SIM_I2C=y
+
+CONFIG_MEDIA_PSRAM_SIZE_4M=y
+CONFIG_NTP_SYNC_RTC=y
+
+# cJSON.c only compiles into the "json" component when this is set (see
+# ap/components/json/Kconfig) — without it, cJSON_* symbols used by
+# anedya_cam_mqtt.c/anedya_cam_webrtc.c are undefined at link time.
+CONFIG_CJSON_USE=y
+
+# The board defconfig sets CONFIG_FULL_MBEDTLS=n, which gates an entire
+# "#if CONFIG_FULL_MBEDTLS" branch in mbedtls_psa_crypto_config.h containing
+# MBEDTLS_GENPRIME, MBEDTLS_SSL_COOKIE_C, MBEDTLS_SSL_DTLS_SRTP,
+# MBEDTLS_TIMING_C, MBEDTLS_X509_CRT_WRITE_C, etc. Without it, libpeer's DTLS
+# handshake / SRTP keying / RSA keygen symbols are undefined at link time.
+CONFIG_FULL_MBEDTLS=y
+
+# Default CONFIG_LWIP_PBUF_POOL_SIZE=10 / CONFIG_LWIP_MEM_SIZE=51200 (50KB)
+# are modest for this device's concurrent WiFi + TLS/MQTT + camera + WebRTC
+# (RTP/RTCP + STUN/TURN + DTLS) load. First bumped (10->25 / 50KB->100KB)
+# for a one-time DTLS handshake failure; that wasn't enough for the
+# sustained load of continuous 720p H264 RTP video — "Failed to sendto:
+# Not enough space" recurred constantly once actual streaming started, this
+# time from agent_send() (no retry loop there, so not a busy-loop bug like
+# the DTLS/keepalive ones — genuinely not enough buffer capacity for the
+# throughput). Pushed further; may need another pass if this still isn't
+# enough, ideally informed by an actual free-heap reading rather than
+# another guess.
+#
+# NOTE: LWIP_MEM_SIZE / MEM_MAX_TX_SIZE / MEM_MAX_RX_SIZE all have
+# "range 1 150000" in ap/components/lwip_intf_v2_1/Kconfig. An out-of-range
+# value is SILENTLY discarded and falls back to the default — an earlier
+# attempt at 153600 here did exactly that, reverting MEM_SIZE to 51200
+# while looking like it had been raised. Verify any change to these lands
+# in build/.../config/sdkconfig.h rather than trusting this file.
+#
+# MEM_MAX_TX_SIZE is the real limiter for outbound video: mem.c enforces
+#   if (type == MEM_TYPE_TX && lwip_stats.mem.tx_used > MEM_MAX_TX_SIZE)
+# and returns NULL (-> ENOMEM, "Not enough space" from sendto). At the
+# 42666 default, a single H264 keyframe fragmented into ~40 x 1300-byte RTP
+# packets (~52KB) exceeds the cap outright, so no PBUF_POOL_SIZE increase
+# could ever have fixed it. Ratios below follow the Kconfig help text's own
+# recommendation: TX = (MEM_SIZE*5)/6, RX = (MEM_SIZE*3)/4.
+CONFIG_LWIP_PBUF_POOL_SIZE=40
+CONFIG_LWIP_MEM_SIZE=150000
+CONFIG_LWIP_MEM_MAX_TX_SIZE=125000
+CONFIG_LWIP_MEM_MAX_RX_SIZE=112500

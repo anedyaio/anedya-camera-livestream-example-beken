@@ -1,0 +1,25 @@
+# Build output lives inside the SDK submodule's tree.
+sdk/build/
+build/
+*.o
+*.elf
+*.map
+
+# Your credentials. anedya_config.h is tracked with placeholders; if you would
+# rather git stopped noticing your edits to it:
+#     git update-index --skip-worktree app/ap/include/anedya_config.h
+*credentials*.h
+secrets.h
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+compile_commands.json
+*.log
+
+# Submodule mount points (populated by 'git submodule update --init --recursive')
+/sdk/
+/libpeer/

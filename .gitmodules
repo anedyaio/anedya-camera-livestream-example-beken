@@ -1,0 +1,9 @@
+[submodule "sdk"]
+	path = sdk
+	url = https://github.com/anedyaio/bk_avdk_smp.git
+	branch = anedya/v3.0.1
+
+[submodule "libpeer"]
+	path = libpeer
+	url = https://github.com/anedyaio/libpeer.git
+	branch = anedya/main
