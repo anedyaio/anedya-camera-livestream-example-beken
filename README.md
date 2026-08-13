@@ -161,6 +161,11 @@ proxy:
 docker pull bekencorp/armino-idk:1.2
 ```
 
+### USB-UART adapter
+
+A **CH340**-based adapter is recommended, or Beken's own serial tool board.
+Some adapters are unreliable at the rates the flashing tool uses.
+
 ### Serial terminal
 
 To watch the device boot you need something that opens a serial port at
@@ -245,19 +250,60 @@ Output: `sdk/build/bk7258/app/package/all-app.bin`
 
 ### 5. Flash
 
-Use **Beken's official flashing tool** (Windows). Select the chip, pick
-`all-app.bin`, choose your serial port, and flash. Flashing needs a **hardware
-reset** — hold RST, start the flash, release when it reports connecting.
+Firmware is burned over UART with **BKFIL**, Beken's official tool.
 
-> **On Linux/macOS** Beken's tool is not available. This example was developed
-> using [`ltchiptool`](https://github.com/libretiny-eu/ltchiptool) to flash and
-> [`picocom`](https://github.com/npat-efault/picocom) for the serial console.
-> Neither is officially supported by Beken; if flashing fails, lower the baud
-> rate.
+Download it from **<https://dl.bekencorp.com/tools/bkfil/v4/gui>** — pick the
+latest version for your operating system.
+
+> ### 🛑 First time with a new board: disable the CRC check
+>
+> **A brand-new module will not start up properly until the CRC feature is
+> disabled.** This is done once, ever, and can be burned together with the
+> firmware — so do it now rather than wondering later why the board is silent.
+>
+> 1. Download `efuse_config_disable_crc.json` from
+>    <https://dl.bekencorp.com/tools/disable_crc>
+> 2. In BKFIL's **Download** page, click the **otp/efuse** option and select
+>    that file
+> 3. Select your port and click **Download**, alongside the firmware below
+> 4. Check the log to confirm it succeeded
+>
+> **Do not modify that file.** It is a fixed configuration from Beken, and
+> editing it will stop the device booting. You never need to repeat this step
+> for later firmware updates.
+
+**Burning the firmware:**
+
+1. Open BKFIL and go to the **Download** page
+2. Select the firmware:
+
+   ```
+   sdk/build/bk7258/app/package/all-app.bin
+   ```
+
+3. Choose the serial port — it is the one labelled **DL_UART0**
+4. Click **Download**
+5. **Power cycle the device** once burning completes
+
+> **Stuck on `Getting Bus...`?** Press the board's reset button once to restore
+> the CPU state, and it will continue.
+
+**Serial adapter.** A **CH340**-based USB-UART adapter is recommended, or
+Beken's own serial tool board. Not every adapter negotiates reliably at the
+rates BKFIL uses; if burning fails repeatedly, try a lower baud rate or a
+different adapter before suspecting the firmware.
+
+> **Open-source alternative.** The community
+> [BK7231GUIFlashTool](https://github.com/openshwprojects/BK7231GUIFlashTool)
+> also flashes these parts. This example was developed on Linux using
+> [`ltchiptool`](https://github.com/libretiny-eu/ltchiptool). Neither is
+> supported by Beken, and neither performs the CRC-disable step above — use
+> BKFIL for that at least once.
 
 ### 6. Watch it boot
 
-Serial at **115200 baud**:
+Connect to **DL_UART0** at **115200 baud**. The same port carries the CLI, so
+`help` lists the SDK's built-in commands.
 
 ```
 Wi-Fi connected
@@ -339,8 +385,14 @@ Refresh that keeps a long session from being torn down mid-stream.
 
 ## 🩺 Troubleshooting
 
-**Nothing on serial** — wrong baud (115200) or port. On Linux, add yourself to
-the `dialout` group and log back in.
+**Board does nothing at all after a first flash** — the CRC check was probably
+never disabled. See the warning in step 5; a new module will not start up until
+`efuse_config_disable_crc.json` has been burned once.
+
+**Burning stalls at `Getting Bus...`** — press the board's reset button once.
+
+**Nothing on serial** — wrong port (use DL_UART0) or baud (115200). On Linux,
+add yourself to the `dialout` group and log back in.
 
 **Wi-Fi never connects** — 5 GHz network, or a typo. The board is 2.4 GHz only.
 
@@ -391,6 +443,8 @@ Each change is a separate commit with its reasoning, and
 - [WebRTC Peer Connections](https://webrtc.org/getting-started/peer-connections)
 - [libpeer](https://github.com/sepfy/libpeer) — the WebRTC implementation this port builds on
 - [Beken Armino AVDK](https://github.com/bekencorp/bk_avdk_smp)
+- [Armino documentation — burning firmware](https://docs.bekencorp.com/arminodoc/bk_avdk_smp/smp_doc/bk7259/en/v4.0.1/get-started/index.html)
+- [BKFIL flashing tool](https://dl.bekencorp.com/tools/bkfil/v4/gui)
 - [RFC 5766 — TURN](https://datatracker.ietf.org/doc/html/rfc5766)
 - [RFC 4585 — RTP/AVPF, Generic NACK](https://datatracker.ietf.org/doc/html/rfc4585)
 
