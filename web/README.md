@@ -9,21 +9,27 @@ network once loaded.
 
 ## Running it
 
-It must be served over **HTTP**, not opened as a `file://` URL. Browsers only
-grant microphone access and `getUserMedia` to secure contexts, and `file://` is
-not one — the page will load but two-way audio will silently not work.
+**Just open `index.html`.** Double-click it, or drag it into a browser window.
+No web server, no build step.
 
-Any static server will do. From this directory:
+`file://` counts as a potentially-trustworthy origin, so microphone access
+works and two-way audio is available without any hosting.
+
+> ### ⚠️ Chrome or Edge only
+>
+> Other browsers have known WebRTC issues with this stream that are outside our
+> control — Firefox and Safari negotiate H.264 differently. Use Chrome or Edge.
+
+If you would rather serve it (for example to open it from another machine on
+your network), any static server works:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Then open <http://localhost:8000>.
-
-`localhost` counts as a secure context, so this works without setting up TLS.
-If you serve it from another machine by IP, the browser will block microphone
-access until you put it behind HTTPS.
+Note that serving it by IP rather than `localhost` puts it on an insecure
+origin, and the browser will then block microphone access until it is behind
+HTTPS. Opening the file directly avoids that entirely.
 
 ## First run
 
@@ -70,8 +76,8 @@ visible from the device side, which is why it is printed here.
   using your API key. It does not use the ones compiled into the firmware —
   those are for the camera. Both ends need working credentials for a call
   across different networks.
-- **Chrome and Edge are the tested browsers.** Firefox and Safari negotiate
-  H.264 differently and have not been verified.
+- **Chrome and Edge only.** Firefox and Safari negotiate H.264 differently and
+  have known issues with this stream that are not fixable from our side.
 - The offer is compressed (`deflate-raw` + base64) before being sent, because
   an Anedya command payload is limited to roughly 1 KB and a full SDP is
   several times that.

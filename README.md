@@ -7,6 +7,8 @@
 
 # Beken BK7258 — WebRTC Camera Livestream with Anedya
 
+![Camera View](./media/bk7258_camera_view.png)
+
 Turn a Beken BK7258 with a UVC camera into a real-time, two-way audio and video
 device with Anedya (Commands signalling and TURN relay).
 
@@ -28,7 +30,8 @@ device with Anedya (Commands signalling and TURN relay).
 | Beken Armino AVDK (Docker) | Available |
 
 Builds on Linux, macOS and Windows — the toolchain runs inside Beken's official
-Docker image, so nothing is installed on your machine but Docker itself.
+Docker image, so nothing is installed on your machine but Docker itself. See
+[Prerequisites](#-prerequisites) for a step-by-step setup.
 
 ---
 
@@ -71,6 +74,108 @@ Docker image, so nothing is installed on your machine but Docker itself.
   ├── sdk/                            — Beken Armino AVDK          (submodule)
   └── libpeer/                        — WebRTC implementation      (submodule)
 ```
+
+---
+
+## 🧰 Prerequisites
+
+You need **three things**: Git, Docker, and a serial terminal. Nothing else —
+no compilers, no SDK installer, no Python packages.
+
+### Docker
+
+The firmware is built inside Beken's official Docker image, so the compiler and
+every tool it needs are already set up and identical on every machine. You never
+install a toolchain.
+
+<details>
+<summary><b>Windows</b></summary>
+
+1. Install [Docker Desktop](https://docs.docker.com/desktop/install/windows-install/)
+2. During setup, keep **"Use WSL 2 instead of Hyper-V"** ticked (the default)
+3. Start Docker Desktop and wait for the whale icon in the tray to stop animating
+4. Check it works — open PowerShell:
+
+   ```powershell
+   docker run --rm hello-world
+   ```
+
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
+
+1. Install [Docker Desktop](https://docs.docker.com/desktop/install/mac-install/)
+   — pick the **Apple Silicon** or **Intel** build to match your Mac
+2. Start it and wait for the whale icon in the menu bar to settle
+3. Check it works:
+
+   ```bash
+   docker run --rm hello-world
+   ```
+
+On Apple Silicon the build image is x86-64 and runs under emulation. It works,
+but expect the first build to be noticeably slower.
+
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+1. Install Docker Engine using
+   [Docker's own instructions](https://docs.docker.com/engine/install/) for your
+   distribution — the `docker.io` package in some distro repositories is old
+2. Add yourself to the `docker` group so you do not need `sudo`:
+
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+
+3. **Log out and back in** for that to take effect
+4. Check it works:
+
+   ```bash
+   docker run --rm hello-world
+   ```
+
+If you get "permission denied while trying to connect to the Docker daemon
+socket", step 2 or 3 did not take. Do not work around it with `sudo` — see the
+warning in the build step below.
+
+</details>
+
+#### The build image
+
+```
+bekencorp/armino-idk:1.2
+```
+
+It is on Docker Hub and **the build script pulls it automatically** the first
+time you build, so there is nothing to do in advance. It is a large download
+(roughly 2 GB) and happens once.
+
+If you would rather fetch it up front, or the automatic pull fails behind a
+proxy:
+
+```bash
+docker pull bekencorp/armino-idk:1.2
+```
+
+### Serial terminal
+
+To watch the device boot you need something that opens a serial port at
+**115200 baud**:
+
+| Platform | Options |
+|---|---|
+| Windows | [PuTTY](https://www.putty.org/), or the terminal built into Beken's flashing tool |
+| macOS | `screen /dev/tty.usbserial-XXXX 115200`, or [CoolTerm](https://freeware.the-meiers.org/) |
+| Linux | [`picocom -b 115200 /dev/ttyUSB0`](https://github.com/npat-efault/picocom), or `screen` |
+
+### Git
+
+Any recent version. You need submodule support, which has been standard for
+years.
 
 ---
 
@@ -163,13 +268,20 @@ WebRTC subsystem ready, waiting for offer...
 
 ### 7. Open the viewer
 
-```bash
-cd web && python3 -m http.server 8000
-```
+**Just open `web/index.html` in your browser.** Double-click it, or drag it into
+a window. No web server, no build step — it is a single self-contained file.
 
-Open <http://localhost:8000>, enter your **Node ID** and **Platform API Key** in
-Settings, and press **Start Handshake**. See [`web/README.md`](web/README.md)
-for what its diagnostics mean.
+> ### ⚠️ Use Chrome or Edge
+>
+> Other browsers have known WebRTC issues with this stream that are outside our
+> control. Firefox and Safari negotiate H.264 differently and are not supported
+> here.
+
+Enter your **Node ID** and **Platform API Key** in Settings, then press
+**Start Handshake**. Settings are remembered in the browser, so you only do this
+once.
+
+See [`web/README.md`](web/README.md) for what the page's diagnostics mean.
 
 ---
 
