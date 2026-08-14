@@ -20,6 +20,6 @@ secrets.h
 compile_commands.json
 *.log
 
-# Submodule mount points (populated by 'git submodule update --init --recursive')
-/sdk/
-/libpeer/
+# NOTE: do not add sdk/ or libpeer/ here. They are submodules, and ignoring a
+# submodule path stops git from tracking its gitlink, which silently breaks
+# 'git clone --recursive' for everyone else.
