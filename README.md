@@ -414,17 +414,38 @@ buffer, so the frame never reaches the encoder at all.
 
 ## 🔧 A note on the SDK
 
-This example needs **six changed files, 93 lines** in the Beken SDK — mostly to
-compile sources that ship on disk but were left out of the build, and to enable
-DTLS-SRTP. The SDK is consumed as a submodule of a fork, so you can see exactly
-what differs from upstream:
+This example needs **six changed files, 93 lines** in the Beken SDK, and they
+split into two kinds:
+
+**Four are things the SDK already ships that we simply enabled.** We did not
+modify any of that code. `rsa.c`, `ecdh.c`, `ecdsa.c`, `ecp.c`, `timing_alt.c`,
+lwIP's MQTT client and its altcp TLS layer are all present in the SDK, byte for
+byte as Beken wrote them — they were just missing from the components' explicit
+source lists, so their symbols did not exist at link time. `MBEDTLS_TIMING_ALT`
+and `MBEDTLS_SSL_DTLS_SRTP` were likewise already in Beken's config header,
+commented out. The changes are two build lists, two uncommented `#define`s, and
+one MQTT buffer size raised from a default too small to hold a real payload.
+
+**Two are bug fixes to code that does not compile as delivered.** `ecp.c`
+defines a `static` function whose name collides with a public, differently
+signatured one that Beken declares in its own patched `bignum.h` — renamed, and
+being `static` it is invisible outside that file. `altcp_tls_mbedtls.c` is
+written against mbedTLS 2.x while the SDK ships 3.x, so TLS over lwIP is
+unbuildable out of the box — ported to the 3.x API. **Beken has already fixed
+the second one in `release/v4.0.1`.**
+
+No driver, RTOS, Wi-Fi, USB or media-pipeline source is touched.
+
+The SDK is consumed as a submodule of a fork, so you can see exactly what
+differs from upstream:
 
 ```bash
-git -C sdk log release/v3.0.1..HEAD
+git -C sdk log  release/v3.0.1..HEAD
+git -C sdk diff release/v3.0.1..HEAD
 ```
 
 Each change is a separate commit with its reasoning, and
-[`docs/PATCHES.md`](docs/PATCHES.md) summarises all six with a defence for each.
+[`docs/PATCHES.md`](docs/PATCHES.md) covers all six in detail.
 
 ---
 
