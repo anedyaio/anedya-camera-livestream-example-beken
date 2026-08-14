@@ -1,0 +1,56 @@
+# Publish the browser viewer to GitHub Pages.
+#
+# The viewer is web/index.html, a single self-contained file. GitHub Pages can
+# only serve a repository root or a /docs folder directly, and /docs already
+# holds PATCHES.md and PORTING_REPORT.md, so neither is usable here. Uploading
+# web/ as a Pages artifact serves it at the site root instead, which keeps
+# web/index.html as the one copy of the viewer -- nothing to duplicate and
+# nothing to drift.
+#
+# Result: https://anedyaio.github.io/anedya-camera-livestream-example-beken/
+#
+# ONE-TIME SETUP: Settings -> Pages -> Build and deployment -> Source must be
+# set to "GitHub Actions". Without it this workflow runs and then fails at the
+# deploy step.
+
+name: Deploy viewer to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs to mint an OIDC token and publish a Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deployments race. Queue rather than cancel, so a run already
+# publishing is allowed to finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # Only web/ is published. The firmware, the SDK submodule and the docs
+      # are not part of the site.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
