@@ -48,12 +48,21 @@
  * 2. Anedya device
  * ===========================================================================
  *
- * DEVICE UUID
+ * DEVICE UUID  —  this is the PHYSICAL DEVICE ID, not the Node ID
  *
- * You choose this value rather than receiving it. Generate a UUID (v4) first
- * — any online UUID generator will do — then create the Node in the Anedya
- * console using it. Supplying your own avoids colliding with an existing
- * device.
+ * A Node has two identifiers and they are not interchangeable:
+ *
+ *     Physical Device ID   you generate it    -> goes here, in the firmware
+ *     Node ID              the console does   -> goes in the browser page
+ *
+ * The Node ID is issued by the console after the Node exists. Putting it here
+ * will not work, and the failure looks like a rejected credential rather than
+ * a mixed-up value.
+ *
+ * You choose the Physical Device ID rather than receiving it. Generate a UUID
+ * (v4) first — any online UUID generator will do — then create the Node in the
+ * Anedya console using it. Supplying your own avoids colliding with an
+ * existing device.
  *
  * A UUID is 32 hexadecimal digits in five hyphen-separated groups of
  * 8-4-4-4-12, so 36 characters in total:
@@ -93,7 +102,8 @@
  * credentials here the stream only works when browser and camera are on the
  * same LAN.
  *
- * Get a pair from Anedya's relay API:
+ * Generate a pair in the Anedya console, under RELAYS. That is the intended
+ * route. The platform API does the same thing if you would rather script it:
  *
  *     POST https://api.ap-in-1.anedya.io/v1/relay/create
  *

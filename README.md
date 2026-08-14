@@ -197,14 +197,26 @@ Forgot `--recursive`? Run `git submodule update --init --recursive`.
 
 ### 2. Create your Node
 
-The Device UUID is **yours to choose**, not something the console issues.
-Generate a UUID (v4) from any generator, then create the Node in the Anedya
-console using it — supplying your own avoids colliding with an existing device.
-The format is 8-4-4-4-12 hex digits:
+A Node has **two different identifiers**. They are not interchangeable, and
+mixing them up is the most common way to get stuck here:
+
+| Identifier | Who creates it | Used by |
+|---|---|---|
+| **Physical Device ID** | **You**, before creating the Node | The firmware — `ANEDYA_DEVICE_UUID` |
+| **Node ID** | **The console**, once the Node exists | The browser viewer page |
+
+The **Physical Device ID** is yours to choose, not something the console
+issues. Generate a UUID (v4) from any generator and create the Node using it —
+supplying your own avoids colliding with an existing device. The format is
+8-4-4-4-12 hex digits:
 
 ```
 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
+
+The **Node ID** is issued by the console *after* the Node is created. You
+cannot pick it and it is not your UUID. Keep it — the viewer page asks for it
+in step 6.
 
 > **Preauthorize the Node.** Without it the device is refused at connect time
 > even though the UUID and key are correct, and it looks exactly like a wrong
@@ -221,19 +233,30 @@ app/ap/include/anedya_config.h
 | Setting | Where it comes from |
 |---|---|
 | `ANEDYA_WIFI_SSID` / `_PASSWORD` | Your 2.4 GHz network |
-| `ANEDYA_DEVICE_UUID` | The UUID you generated in step 2 |
+| `ANEDYA_DEVICE_UUID` | The **Physical Device ID** — the UUID you generated in step 2, *not* the Node ID |
 | `ANEDYA_CONNECTION_KEY` | Issued by the console alongside the Node |
-| `ANEDYA_TURN_USERNAME` / `_CREDENTIAL` | `POST /v1/relay/create` on the Anedya API |
+| `ANEDYA_TURN_USERNAME` / `_CREDENTIAL` | Anedya console → **Relays** → create a relay credential |
 
 The file explains each one inline, including how each fails when it is wrong.
 
 > **TURN credentials expire.** The trailing number in the username is a Unix
 > timestamp — the moment they stop working. An expired pair makes the relay
-> answer `401`, which looks exactly like a code bug and is not one.
+> answer `401`, which looks exactly like a code bug and is not one. Generate a
+> fresh pair from the Relays section when that happens.
 
-Note the **Connection Key** (the device's, used by the firmware) is not the
-**Platform API Key** (your account's, used by the browser page). You need both,
-in different places.
+#### Two pairs of things that are easy to confuse
+
+The firmware and the browser page authenticate **separately**, with different
+credentials. Nothing you put in `anedya_config.h` is used by the browser:
+
+| The firmware uses | The browser page uses |
+|---|---|
+| **Physical Device ID** — the UUID you generated | **Node ID** — issued by the console |
+| **Connection Key** — the device's, issued with the Node | **Platform API Key** — your account's |
+
+You need all four, in two different places. Putting a Node ID in
+`ANEDYA_DEVICE_UUID`, or a Platform API Key in `ANEDYA_CONNECTION_KEY`, fails
+in a way that looks like a broken build rather than a wrong value.
 
 ### 4. Build
 
@@ -396,8 +419,9 @@ add yourself to the `dialout` group and log back in.
 
 **Wi-Fi never connects** — 5 GHz network, or a typo. The board is 2.4 GHz only.
 
-**MQTT never connects** — check the Node is **preauthorized** first, then the
-UUID and Connection Key. All three look identical from outside: the broker
+**MQTT never connects** — check the Node is **preauthorized** first, then that
+`ANEDYA_DEVICE_UUID` holds the **Physical Device ID** and not the Node ID, then
+the Connection Key. All four failures look identical from outside: the broker
 closes the connection right after CONNECT.
 
 **Connects, but no video** — usually SDP negotiation or SRTP. Look for
