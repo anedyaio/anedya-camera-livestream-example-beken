@@ -205,18 +205,27 @@ mixing them up is the most common way to get stuck here:
 | **Physical Device ID** | **You**, before creating the Node | The firmware — `ANEDYA_DEVICE_UUID` |
 | **Node ID** | **The console**, once the Node exists | The browser viewer page |
 
-The **Physical Device ID** is yours to choose, not something the console
-issues. Generate a UUID (v4) from any generator and create the Node using it —
-supplying your own avoids colliding with an existing device. The format is
-8-4-4-4-12 hex digits:
+In order:
 
-```
-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-```
+1. **Generate a UUID (v4)** from any online generator. Supplying your own
+   avoids colliding with an existing device. The format is 8-4-4-4-12 hex
+   digits:
 
-The **Node ID** is issued by the console *after* the Node is created. You
-cannot pick it and it is not your UUID. Keep it — the viewer page asks for it
-in step 6.
+   ```
+   xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   ```
+
+2. **Create the Node in the Anedya console**, pasting that same UUID into the
+   form as the Physical Device ID. It is yours to choose — the console does not
+   issue it.
+
+3. **The Node ID appears once the Node is created.** Keep it. You cannot pick
+   it, it is not the UUID you just typed in, and the viewer page asks for it in
+   step 7.
+
+So the one UUID you generated goes in **twice**: into the console when creating
+the Node, and into `anedya_config.h` when you flash the firmware. The Node ID
+that comes back is a separate value used only by the browser.
 
 > **Preauthorize the Node.** Without it the device is refused at connect time
 > even though the UUID and key are correct, and it looks exactly like a wrong

@@ -59,10 +59,15 @@
  * will not work, and the failure looks like a rejected credential rather than
  * a mixed-up value.
  *
- * You choose the Physical Device ID rather than receiving it. Generate a UUID
- * (v4) first — any online UUID generator will do — then create the Node in the
- * Anedya console using it. Supplying your own avoids colliding with an
- * existing device.
+ * You choose the Physical Device ID rather than receiving it:
+ *
+ *   1. Generate a UUID (v4) — any online UUID generator will do.
+ *   2. Create the Node in the Anedya console, pasting that same UUID into the
+ *      form. Supplying your own avoids colliding with an existing device.
+ *   3. The console shows the Node ID once the Node exists. That one is for the
+ *      browser page, not for this file.
+ *
+ * The UUID from step 1 is used twice: once in the console, and once here.
  *
  * A UUID is 32 hexadecimal digits in five hyphen-separated groups of
  * 8-4-4-4-12, so 36 characters in total:
