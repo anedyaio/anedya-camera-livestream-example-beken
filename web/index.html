@@ -1338,6 +1338,37 @@
         // Strip all carriage returns to save another ~60 bytes
         rawOfferSdp = rawOfferSdp.replace(/\r\n/g, "\n");
 
+        // Collapse the ICE candidate list.
+        //
+        // Chrome repeats the full candidate block under every m-section, so an
+        // audio+video offer carries each candidate twice. With BUNDLE there is
+        // only one ICE transport, and libpeer's agent_set_remote_description()
+        // (agent.c) walks the whole SDP collecting every a=candidate line with
+        // no m-section awareness, then discards any whose foundation it has
+        // already seen. The second block is therefore parsed and thrown away.
+        //
+        // On a machine with several interfaces (Wi-Fi, docker0, virtual
+        // adapters) this is what pushes the offer past Anedya's ~1KB command
+        // limit: "command data size exceeded", errcode 4000. Keeping candidates
+        // in the first m-section only, deduplicated by foundation, mirrors
+        // exactly what the device would have kept anyway.
+        {
+          const before = (rawOfferSdp.match(/^a=candidate:/gm) || []).length;
+          const seenFoundations = new Set();
+          let mSectionCount = 0;
+          rawOfferSdp = rawOfferSdp.split("\n").filter(line => {
+            if (line.startsWith("m=")) mSectionCount++;
+            if (!line.startsWith("a=candidate:")) return true;
+            if (mSectionCount > 1) return false;
+            const foundation = line.split(" ")[0];
+            if (seenFoundations.has(foundation)) return false;
+            seenFoundations.add(foundation);
+            return true;
+          }).join("\n");
+          const after = (rawOfferSdp.match(/^a=candidate:/gm) || []).length;
+          log(`ICE candidates in offer: ${before} → ${after} after dedupe`);
+        }
+
         const offerSdp = rawOfferSdp.replaceAll("a=setup:actpass\n", "a=setup:passive\n");
         log(`Local offer SDP length: ${offerSdp.length} chars`);
         if (offerSdp !== rawOfferSdp) {
