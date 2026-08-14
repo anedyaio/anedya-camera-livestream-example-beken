@@ -1352,21 +1352,46 @@
         // limit: "command data size exceeded", errcode 4000. Keeping candidates
         // in the first m-section only, deduplicated by foundation, mirrors
         // exactly what the device would have kept anyway.
+        // The device stores at most AGENT_MAX_CANDIDATES (10) remote
+        // candidates and Chrome emits them in priority order, host first. On a
+        // machine with several interfaces the host candidates alone fill that
+        // array, so the srflx and relay candidates never reach the device and
+        // ICE is left choosing between host addresses that may be a docker
+        // bridge or a virtual adapter rather than the real LAN address. That
+        // shows up as ICE reaching "connected" and DTLS then timing out,
+        // because the chosen pair passes a STUN check but carries nothing.
+        //
+        // Keep a balanced few of each type instead of many of one, so the
+        // device always receives a usable relay candidate.
+        const MAX_PER_CANDIDATE_TYPE = { host: 2, srflx: 2, relay: 2 };
         {
           const before = (rawOfferSdp.match(/^a=candidate:/gm) || []).length;
           const seenFoundations = new Set();
+          const keptPerType = { host: 0, srflx: 0, relay: 0 };
           let mSectionCount = 0;
           rawOfferSdp = rawOfferSdp.split("\n").filter(line => {
             if (line.startsWith("m=")) mSectionCount++;
             if (!line.startsWith("a=candidate:")) return true;
+            // With BUNDLE there is one ICE transport, and the device's parser
+            // collects candidates from the whole SDP regardless of m-section,
+            // so the repeated block under the second m-line is dead weight.
             if (mSectionCount > 1) return false;
             const foundation = line.split(" ")[0];
             if (seenFoundations.has(foundation)) return false;
+            // IPv6 is dropped: agent_update_candidate_pairs() only pairs
+            // candidates of matching address family and the device is IPv4.
+            const address = line.split(" ")[4] || "";
+            if (address.includes(":")) return false;
+            const type = (line.match(/ typ (\w+)/) || [])[1];
+            const cap = MAX_PER_CANDIDATE_TYPE[type];
+            if (cap === undefined || keptPerType[type] >= cap) return false;
+            keptPerType[type]++;
             seenFoundations.add(foundation);
             return true;
           }).join("\n");
           const after = (rawOfferSdp.match(/^a=candidate:/gm) || []).length;
-          log(`ICE candidates in offer: ${before} → ${after} after dedupe`);
+          log(`ICE candidates in offer: ${before} → ${after} ` +
+              `(host=${keptPerType.host} srflx=${keptPerType.srflx} relay=${keptPerType.relay})`);
         }
 
         const offerSdp = rawOfferSdp.replaceAll("a=setup:actpass\n", "a=setup:passive\n");
