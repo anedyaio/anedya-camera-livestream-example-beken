@@ -35,7 +35,7 @@ HTTPS. Opening the file directly avoids that entirely.
 
 1. Open the page and expand **Settings**
 2. Fill in:
-   - **Node ID** — the same device UUID you put in `anedya_config.h`
+   - **Node ID** — Generated in Anedya's Console after you make a node.
    - **Platform API Key** — from the Anedya console (this is an *account* key,
      not the device connection key)
 3. Press **Start Handshake**
