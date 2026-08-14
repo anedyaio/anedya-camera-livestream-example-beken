@@ -173,7 +173,7 @@ To watch the device boot you need something that opens a serial port at
 
 | Platform | Options |
 |---|---|
-| Windows | [PuTTY](https://www.putty.org/), or the terminal built into Beken's flashing tool |
+| Windows | [PuTTY](https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html), or the terminal built into Beken's flashing tool |
 | macOS | `screen /dev/tty.usbserial-XXXX 115200`, or [CoolTerm](https://freeware.the-meiers.org/) |
 | Linux | [`picocom -b 115200 /dev/ttyUSB0`](https://github.com/npat-efault/picocom), or `screen` |
 
